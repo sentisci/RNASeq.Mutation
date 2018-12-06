@@ -124,7 +124,9 @@ TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1 <- TumorFiltered.Normal.freq.VAF.T
                                                                                                                "Tier 1.3",
                                                                                                                "Tier 1.4")]
 TumorFiltered.Normal.freq.VAF.TC.VC.MAF.DiseaseCausing <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1[
-                                      Clinvar.Pathogenic %in% c("Y") ]
+                                      Clinvar.Pathogenic %in% c("Y") | HGMD.Disease %in% c("Y") | Intervar %in% c("Likely pathogenic",
+                                                                                                                  "Pathogenic",
+                                                                                                                  "Uncertain significance") ]
 sort(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.DiseaseCausing$Gene))
 
 
