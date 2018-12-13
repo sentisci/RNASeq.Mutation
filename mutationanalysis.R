@@ -19,7 +19,7 @@ rnaseqMutationProject <- ProjectSetUp$new(
   csRDS                   = "C:/Users/sindiris/R Scribble/Annotation RDS/CellSurface.RDS",
   cgaRDS                  = "C:/Users/sindiris/R Scribble/Annotation RDS/cancerGermlineAntigens.rds",
   ewsr1Fli1RDS            = "C:/Users/sindiris/R Scribble/Annotation RDS/EWSR1_FL1_DownstreamTargets.RDS",
-  pax3Foxo1RDS             = "C:/Users/sindiris/R Scribble/Annotation RDS/PAX3_FOXO1_DownstreamTargets.RDS",
+  pax3Foxo1RDS            = "C:/Users/sindiris/R Scribble/Annotation RDS/PAX3_FOXO1_DownstreamTargets.RDS",
 
   outputPrefix            = "_rnaseq.annotated.vcf",
   factorName              = "PATIENT.ID",
@@ -47,24 +47,76 @@ mergeVCFObject <- corUtilsFuncs$getMergedMatrix(dir               = "vcfFiles",
                                                    metadataFileRefCol= "Patient.ID")
 ## Make syntactically right names.
 mergeVCFObject$Patient.ID <- make.names(mergeVCFObject$Patient.ID)
-## Append Diagnosis
-## Not Working
-# mergeVCFObjectDiagnosis <- corUtilsFuncs$leftjoinDTs(mergeVCFObject, data.table(rnaseqMutationProject$validMetaDataDF[, c("Patient.ID","DIAGNOSIS.Alias")]) , 
-#                                                     key = "Patient.ID") ; class(mergeVCFObjectDiagnosis); dim(mergeVCFObjectDiagnosis)
-## STEP 1 (Assemble all the variants in the cohort)
-mergeVCFObjectDiagnosis <- dplyr::left_join(mergeVCFObject, data.table(rnaseqMutationProject$validMetaDataDF[, 
-                                                        c("Patient.ID","DIAGNOSIS.Alias","LIBRARY_TYPE")]), by="Patient.ID") %>% 
-                           dplyr::filter(! Patient.ID %in% c("NA.")) %>% 
-                           dplyr::filter(!is.na(MAF)) %>% 
-                           data.table()
-dim(mergeVCFObjectDiagnosis)
-## dplyr way
-#mergeVCFObjectDiagnosis <- mergeVCFObjectDiagnosis %>% dplyr::mutate(variantKey = paste(Chr,Start,End,Ref,Alt))
-## data.table way
-mergeVCFObject.variantKey <- mergeVCFObjectDiagnosis[, variantKey := paste(Chr,Start,End,Ref,Alt,sep="_")][order(variantKey)]
+mergeVCFObject.variantKey <- mergeVCFObject[, variantKey := paste(Chr,Start,End,Ref,Alt,sep="_")][order(variantKey)]
 dim(mergeVCFObject.variantKey)
-write.table(mergeVCFObject.variantKey, 
-            paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, "1.MAF.LT.5pc.txt", sep="/"),
+## Append Diagnosis
+## STEP 0 Make a tier DF
+TierDF <- data.table(Tier=c("Tier 1.0","Tier 1.1","Tier 1.2","Tier 1.3","Tier 1.4","Tier 2","Tier 3","Tier 4", ""), code=c(1,2,3,4,5,6,7,8,9))
+
+## STEP 1 (Assemble all the variants in the cohort and do basic data processing)
+mergeVCFObjectDiagnosis <- dplyr::left_join(mergeVCFObject.variantKey, 
+                                unique( data.table(rnaseqMutationProject$validMetaDataDF[, c("Patient.ID","DIAGNOSIS.Alias","LIBRARY_TYPE")]) ), by="Patient.ID") %>% 
+                                data.table()
+dim(mergeVCFObjectDiagnosis)
+## 1a
+mergeVCFObjectDiagnosis[, (c("Exonic.function")) := ifelse(Region %in% c("splicing","ncRNA_exonic","ncRNA_splicing","intronic",
+                                                                         "UTR3","ncRNA_intronic","-","intergenic","upstream"),
+                                                                                      Region , Exonic.function)]
+unique(mergeVCFObjectDiagnosis$Exonic.function); unique(mergeVCFObjectDiagnosis$Region)
+## 1b
+mergeVCFObjectDiagnosis[, (c("MAF", "VAF")) := replace(.SD, is.na(.SD), 0), .SDcols = c("MAF", "VAF")]
+
+## 1c
+mergeVCFObjectDiagnosis <- mergeVCFObjectDiagnosis %>% dplyr::filter(! Patient.ID %in% c("NA.") ) %>% 
+                                                       dplyr::filter(! Exonic.function %in% c("ncRNA_exonic","ncRNA_splicing",
+                                                                                     "ncRNA_intronic","-","intergenic",
+                                                                                     "synonymous SNV")) %>% 
+                                                       data.table()
+unique(mergeVCFObjectDiagnosis$Exonic.function); unique(mergeVCFObjectDiagnosis$Region)
+dim(mergeVCFObjectDiagnosis)
+
+## 1d Add smallest Tier
+## Method 1 using apply very slow
+system.time ({
+mergeVCFObjectDiagnosis$Variant.Tier <- apply(mergeVCFObjectDiagnosis[,c("Somatic.Tier","Germline.Tier")], 1, function(x){ 
+    
+  if( TierDF[Tier == x["Somatic.Tier"]]$code < TierDF[Tier == x["Germline.Tier"]]$code ) {
+    return(x["Somatic.Tier"])
+  } else {
+    x["Germline.Tier"]
+  }
+})
+})
+
+## Method 2 using for loop, probably fast
+Variant.Tier <- list(Variant.Tier = rep(NA, nrow(mergeVCFObjectDiagnosis)) )
+system.time ({
+for ( i in 1:nrow(mergeVCFObjectDiagnosis)) {
+
+  
+  Variant.Tier[i] <- ifelse(TierDF[Tier == mergeVCFObjectDiagnosis[i]$Somatic.Tier]$code < TierDF[Tier == mergeVCFObjectDiagnosis[i]$Germline.Tier]$code,
+                          mergeVCFObjectDiagnosis[i]$Somatic.Tier, mergeVCFObjectDiagnosis[i]$Germline.Tier)
+}
+})
+
+## Temporary solutions
+mergeVCFObjectDiagnosis$Variant.Tier <- VariantTier
+
+
+## 1d Mutation frequency across all cohort
+totalPatients = length(unique(mergeVCFObjectDiagnosis$Patient.ID))
+variantsFreqInCohort = mergeVCFObjectDiagnosis[, .(variantInSamples = .N, propInAllPatients = (length(unique(Patient.ID))/totalPatients) ) , 
+                                               by = variantKey ]
+setkey(variantsFreqInCohort, variantKey)
+variantsFreqInCohort <- variantsFreqInCohort[order(-propInAllPatients),]
+dim(variantsFreqInCohort); head(variantsFreqInCohort)
+
+mergeVCFObjectDiagnosis<- merge( mergeVCFObjectDiagnosis, variantsFreqInCohort, by="variantKey" ); dim(mergeVCFObjectDiagnosis)
+
+saveRDS(mergeVCFObjectDiagnosis,
+         paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirRDSDir, "1.All.variants.RDS", sep="/"))
+write.table(mergeVCFObjectDiagnosis, 
+            paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, "1.All.variants.txt", sep="/"),
             sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 ## Separate Normal variants into different DF
@@ -73,14 +125,14 @@ write.table(mergeVCFObject.variantKey,
 # mergeVCFObjectDiagnosis.Normal <- mergeVCFObjectDiagnosis %>% dplyr::filter(DIAGNOSIS.Alias %in% c("NS"))
 # dim(mergeVCFObjectDiagnosis.Normal)
 ## data.table way
-mergeVCFObject.variantKey.Normal <- mergeVCFObject.variantKey[ DIAGNOSIS.Alias %in% c("NS") ]
+mergeVCFObject.variantKey.Normal <- mergeVCFObjectDiagnosis[ LIBRARY_TYPE %in% c("Normal") ]
 dim(mergeVCFObject.variantKey.Normal)
 
 ## dplyr way
 # mergeVCFObjectDiagnosis.Tumor <- mergeVCFObjectDiagnosis %>% dplyr::filter(!DIAGNOSIS.Alias %in% c("NS"))
 # dim(mergeVCFObjectDiagnosis.Tumor)
 ## data.table way
-mergeVCFObject.variantKey.Tumor <- mergeVCFObject.variantKey[ !DIAGNOSIS.Alias %in% c("NS") ]
+mergeVCFObject.variantKey.Tumor <- mergeVCFObjectDiagnosis[ !LIBRARY_TYPE %in% c("Normal") ]
 dim(mergeVCFObject.variantKey.Tumor)
 
 ## STEP 3 (filter the Normal variants from Tumor )
@@ -91,23 +143,24 @@ dim(mergeVCFObject.variantKey.Tumor)
 TumorFiltered.Normal <- mergeVCFObject.variantKey.Tumor[ !variantKey %in% mergeVCFObject.variantKey.Normal$variantKey ]
 setkey(TumorFiltered.Normal, variantKey)
 dim(TumorFiltered.Normal)
+saveRDS(TumorFiltered.Normal, 
+            paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, "2.MAF.LT.5pc_No.NS.RDS", sep="/"))
 write.table(TumorFiltered.Normal, 
             paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, "2.MAF.LT.5pc_No.NS.txt", sep="/"),
             sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
-## STEP 4 Grouping the variants and calculating their frequencies
+## STEP 4 Grouping the variants and calculating their frequencies in Tumor cohort only.
 ## 1st method
-variantsFrequency = TumorFiltered.Normal[, .N , by = variantKey][,prop := (N/sum(N))*100]
+totalPatientsTumorCL = length(unique(TumorFiltered.Normal$Patient.ID))
+variantsFrequency = TumorFiltered.Normal[, .(variantOccuranceInTumor.CL = .N, propInTumor.CL = (length(unique(Patient.ID))/totalPatientsTumorCL) ) , 
+                                         by = variantKey ]
 setkey(variantsFrequency, variantKey)
-variantsFrequency <- variantsFrequency[order(prop),]
-dim(variantsFrequency)
-
+variantsFrequency <- variantsFrequency[order(-propInTumor.CL),]
+dim(variantsFrequency);head(variantsFrequency)
 
 ## STEP 5 Join the frequency table with the main table
-TumorFiltered.Normal.freq <- merge( TumorFiltered.Normal, variantsFrequency, by="variantKey" )
-TumorFiltered.Normal.freq <- TumorFiltered.Normal.freq[order(prop),]
-##  make columns numeric
-TumorFiltered.Normal.freq[, (c("MAF", "VAF")) := replace(.SD, is.na(.SD), 0), .SDcols = c("MAF", "VAF")]
+TumorFiltered.Normal.freq <- merge( TumorFiltered.Normal, variantsFrequency, by="variantKey" ); dim(TumorFiltered.Normal.freq)
+TumorFiltered.Normal.freq <- TumorFiltered.Normal.freq[order(-propInTumor.CL),]
 ## Testing the "fkt" columns
 min(TumorFiltered.Normal.freq$Total.coverage); min(TumorFiltered.Normal.freq$Variant.coverage); 
 min(TumorFiltered.Normal.freq$VAF)           ; min(TumorFiltered.Normal.freq$MAF)
@@ -115,47 +168,57 @@ min(TumorFiltered.Normal.freq$VAF)           ; min(TumorFiltered.Normal.freq$MAF
 
 ## STEP 6 filter by VAF, Variant coverage
 TumorFiltered.Normal.freq.VAF.TC.VC.MAF <- TumorFiltered.Normal.freq[
-                                              Total.coverage >= 10 & Variant.coverage >= 3 & VAF >= 0.10 & MAF <= 0.01 & prop <= 0.1 ]
+                                              Total.coverage >= 10 & Variant.coverage >= 3 & VAF >= 0.10 & MAF <= 0.01 & propInTumor.CL <= 0.10 ]
 dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF)
+saveRDS(TumorFiltered.Normal.freq.VAF.TC.VC.MAF, 
+            paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
+                  "3.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10pc.RDS", sep="/"))
 write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF, 
             paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
-                  "3.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_prop.LTE.10.txt", sep="/"),
+                  "3.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10pc.txt", sep="/"),
             sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 ## STEP 7 filter by population filter 
-TumorFiltered.GermlineTierTier <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF[, .N , by = Germline.Tier][order(Germline.Tier)]
-TumorFiltered.GermlineN <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF[, .N , by = N][order(N)]
+TumorFiltered.GermlineTierTier <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF[, .N , by = Variant.Tier][order(Variant.Tier)]
 TumorFiltered.GermlineClinvar <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF[, .N , by = Clinvar.Pathogenic][order(Clinvar.Pathogenic)]
 TumorFiltered.GermlineIntervar <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF[, .N , by = Intervar][order(Intervar)]
 TumorFiltered.GermlineHGMD <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF[, .N , by = HGMD.Disease][order(HGMD.Disease)]
 
-TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1 <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Germline.Tier %in% c("Tier 1.0",
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.NoTier <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Variant.Tier %in% c("")]
+dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.NoTier)
+write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.NoTier, 
+            paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
+                  "4a.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10.NoTier.txt", sep="/"),
+            sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1 <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Variant.Tier %in% c("Tier 1.0",
                                                                                                                "Tier 1.1",
                                                                                                                "Tier 1.2",
                                                                                                                "Tier 1.3",
                                                                                                                "Tier 1.4")]
+dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1)
 write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1, 
             paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
-                  "4a.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_prop.LTE.10.Tier1.txt", sep="/"),
+                  "4b.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10.Tier1.txt", sep="/"),
             sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 
-TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier2 <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Somatic.Tier %in% c("Tier 2")]
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier2 <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Variant.Tier %in% c("Tier 2")]
 write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier2, 
             paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
-                  "4b.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_prop.LTE.10.Tier2.txt", sep="/"),
+                  "4c.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10.Tier2.txt", sep="/"),
             sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
-TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier3 <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Somatic.Tier %in% c("Tier 3")]
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier3 <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Variant.Tier %in% c("Tier 3")]
 write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier3, 
             paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
-                  "4c.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_prop.LTE.10.Tier3.txt", sep="/"),
+                  "4d.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10.Tier3.txt", sep="/"),
             sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
-TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier4 <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Somatic.Tier %in% c("Tier 4")]
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier4 <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Variant.Tier %in% c("Tier 4")]
 write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier4, 
             paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
-                  "4d.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_prop.LTE.10.Tier4.txt", sep="/"),
+                  "4e.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10.Tier4.txt", sep="/"),
             sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 
@@ -164,6 +227,7 @@ TumorFiltered.Normal.freq.VAF.TC.VC.MAF.DiseaseCausing <- TumorFiltered.Normal.f
   Clinvar.Pathogenic %in% c("Y") | HGMD.Disease %in% c("Y") | Intervar %in% c("Likely pathogenic",
                                                                               "Pathogenic",
                                                                               "Uncertain significance") ]
+dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.DiseaseCausing)
 write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.DiseaseCausing, 
             paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
                   "4e.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_prop.LTE.10.DiseaseCausing.txt", sep="/"),
@@ -172,9 +236,8 @@ write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.DiseaseCausing,
 
 
 ### Plotting
-TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF %>% filter(LIBRARY_TYPE %in% c("Tumor"))
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1 %>% filter(LIBRARY_TYPE %in% c("Tumor"))
 dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor)
-TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor.MT.2 <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF %>% filter(N >=2 )
 TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.CL <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1 %>% filter(LIBRARY_TYPE %in% c("CellLine"))
 dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.CL)
 
@@ -187,25 +250,22 @@ SampleStatsMut.Tumor
 ### Diagnosis Wise mutation frequency 
 MutationDataFilt <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor
 MutationDataFiltSelect <- MutationDataFilt %>% dplyr::select(one_of("Chr","Start","End","Ref","Alt", "Gene", "DIAGNOSIS.Alias", "Patient.ID")) %>% 
-  dplyr::group_by_(.dots=c("Chr", "Start","End","Ref","Alt", "Gene", "DIAGNOSIS.Alias", "Patient.ID") ) %>% 
-  dplyr::mutate(Count=n(), Number = 1) %>% unique() %>% ungroup()  %>% 
-  dplyr::select("Gene","DIAGNOSIS.Alias") %>% 
+  dplyr::select("Gene","Patient.ID","DIAGNOSIS.Alias") %>% 
   dplyr::group_by_(.dots = c("Gene", "DIAGNOSIS.Alias")) %>% 
-  dplyr::mutate(GeneCount = n()) %>% distinct()
+  dplyr::mutate(GeneDiagByPatient = length(unique(Patient.ID))) %>% 
+  dplyr::select("Gene",  "DIAGNOSIS.Alias", "GeneDiagByPatient" ) %>% distinct()
 View(MutationDataFiltSelect); dim(MutationDataFiltSelect)
 
 MutationDataFiltPercent  <-   dplyr::left_join(MutationDataFiltSelect, SampleStatsMut.Tumor, by="DIAGNOSIS.Alias" ) %>%
-  dplyr::select(one_of(c("Gene", "DIAGNOSIS.Alias", "GeneCount", "PatientSum"))) %>%
-  dplyr::mutate(Percent=( (GeneCount/PatientSum)*100)) %>% unique() %>%
+  dplyr::select(one_of(c("Gene", "DIAGNOSIS.Alias", "GeneDiagByPatient", "PatientSum"))) %>%
+  dplyr::mutate(Percent=( (GeneDiagByPatient/PatientSum)*100)) %>% unique() %>%
   dplyr::select(Gene, DIAGNOSIS.Alias, Percent) %>% 
   tidyr::spread(DIAGNOSIS.Alias, Percent) %>% data.frame()
 MutationDataFiltPercent[is.na(MutationDataFiltPercent)] <- 0
 View(MutationDataFiltPercent);dim(MutationDataFiltPercent)
 
 #### By Gene mutation function frequency
-
 MutationDataFilt <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor
-MutationDataFilt[which(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor$Exonic.function %in% c("ALDH2", "FANCD2", "ERBB3")), c("Exonic.function")] <- "nonsynonymous SNV"
 MutationDataFuncCbio <- MutationDataFilt %>% dplyr::select(one_of("Chr","Start","End","Ref","Alt", "Gene", "Exonic.function", "Patient.ID")) %>% 
   dplyr::group_by_(.dots=c("Chr","Start","End","Ref","Alt", "Gene", "Exonic.function", "Patient.ID") ) %>% 
   unique() %>% ungroup()  %>% 
@@ -224,11 +284,20 @@ dim(MutationDataFunc);View(MutationDataFunc)
 ### Join the above two data frames
 mutationFreqPer <- dplyr::full_join(MutationDataFiltPercent, MutationDataFunc, by="Gene") %>% dplyr::arrange(-Sum) %>%
                       dplyr::mutate(Gene = factor(Gene, ordered = TRUE))
+write.table(mutationFreqPer, 
+            paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
+                  "6.mutation.Freq.Per.Diagnosis.and.Gene.txt", sep="/"),
+            sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
-mutationFreqPer.RM.Single <- mutationFreqPer %>% filter(Sum >=2) %>% dplyr::select(1:14) #%>% tibble::column_to_rownames(var="Gene")
+
+mutationFreqPer.RM.Single <- mutationFreqPer %>% filter(Sum >=2) %>% dplyr::select(1:14)
+dim(mutationFreqPer.RM.Single);View(mutationFreqPer.RM.Single)
 mutationFreqPer.RM.Single.tidy.log <- gather(mutationFreqPer.RM.Single, key="Diagnosis", value="Frequency", 2:14) %>% 
-  mutate(Frequency = log2(Frequency+1)/10,
-         Gene = factor(Gene, levels=rev(mutationFreqPer.RM.Single$Gene)))
+         mutate( 
+                #Frequency = log2(Frequency+1)/10,
+                Gene = factor(Gene, levels=rev(mutationFreqPer.RM.Single$Gene))
+                )
+
 
 ## Main heatmap
 HeatMap <- ggplot(mutationFreqPer.RM.Single.tidy.log, aes(Diagnosis,Gene)) + 
