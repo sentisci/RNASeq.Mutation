@@ -184,7 +184,11 @@ CoreUtilities <- R6Class(
     },
     ## Merge CSV or TXT files
     mergeTXTFiles = function( x, fileSuffix=NA ){
-      selectedFileList    <- x[which(basename(x) %in% self$allFileList)]
+      selectedFileList       <- x[which(basename(x) %in% self$allFileList)]
+      notselectedFileList    <- x[which(!basename(x) %in% self$allFileList)]
+      if( length(notselectedFileList) > 1 ) { stop(paste(" couldn't retrived following files. Please check the file names or suffix "
+                                                                     ,paste(basename(notselectedFileList), collapse = "\n")))}
+      
       print(paste0("Selecting ", length(selectedFileList), " files out of ", length(x), " from the given folder"))
       dataMatrixLists     <- lapply(selectedFileList, private$readTXTFiles, fileSuffix=fileSuffix )
       dataMatrix          <- data.table::rbindlist(dataMatrixLists, idcol = FALSE)
@@ -199,7 +203,7 @@ CoreUtilities <- R6Class(
       return(countDF)
       
     },
-    ## Merge RDS files ####
+    ## Merge RDS files
     mergeRDSFiles = function(x ){
       # dataMatrixLists     <- lapply(unlist(x), private$readRDSFiles)
       # rowNames            <- rownames( dataMatrixLists[[1]] )
@@ -246,6 +250,7 @@ CoreUtilities <- R6Class(
       # if(isRowNames) assert_that(!is.na(rowNamesColInFile), msg= "Please provide row names index , \"rowNamesColInFile\" can't be NA ")
       
       self$allFileList = paste0(as.character(metadata[,metadataFileRefCol]),fileSuffix)
+      print(paste0("Total unique entries in the metadata's reference column are ",length(unique(self$allFileList))))
       
       dirs                <- list.dirs(paste0(self$workDir,"/",self$projectName,"/",dir))[-1]
       folderNames         <- basename(dirs)
@@ -345,7 +350,6 @@ CoreUtilities <- R6Class(
       saveRDS(GeneDF_DiffExp, rdsfile)
       write.table(x = GeneDF_DiffExp, file = txtFile, sep="\t", row.names = FALSE, quote=FALSE)
       return(GeneDF_DiffExp)
-    }
-  )
+    }  )
 )
 

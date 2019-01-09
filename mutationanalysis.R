@@ -236,13 +236,11 @@ write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.DiseaseCausing,
 
 
 ### Plotting
-TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1 %>% filter(LIBRARY_TYPE %in% c("Tumor"))
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1 %>% filter(LIBRARY_TYPE %in% c("Tumor", "CellLine"))
 dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor)
-TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.CL <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1 %>% filter(LIBRARY_TYPE %in% c("CellLine"))
-dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.CL)
 
 ## Sample statistics
-SampleStatsMut.Tumor <- rnaseqMutationProject$validMetaDataDF %>% dplyr::filter(LIBRARY_TYPE %in% c("Tumor")) %>% dplyr::select(DIAGNOSIS.Alias) %>% 
+SampleStatsMut.Tumor <- rnaseqMutationProject$validMetaDataDF %>% dplyr::filter(LIBRARY_TYPE %in% c("Tumor", "CellLine")) %>% dplyr::select(DIAGNOSIS.Alias) %>% 
                               dplyr::group_by(DIAGNOSIS.Alias) %>% 
                               dplyr::mutate(PatientSum=n()) %>% distinct()
 SampleStatsMut.Tumor
