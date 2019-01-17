@@ -58,14 +58,57 @@ rm(ALK.1);rm(BCOR.1);rm(CTNNB1.1);rm(TP53.1)
  dim(ALK.9);dim(BCOR.9);dim(CTNNB1.9);dim(TP53.9)
  
  
-  length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Germline.Tier %in% c("Tier 1.0")]$variantKey))
-  length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Germline.Tier %in% c("Tier 1.1")]$variantKey))
-  length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Germline.Tier %in% c("Tier 1.2")]$variantKey))
-  length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Germline.Tier %in% c("Tier 1.3")]$variantKey))
-  length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Germline.Tier %in% c("Tier 1.4")]$variantKey))
-  length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Germline.Tier %in% c("Tier 2")]$variantKey))
-  length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Germline.Tier %in% c("Tier 3")]$variantKey))
-  length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Germline.Tier %in% c("Tier 4")]$variantKey))
+  length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Variant.Tier %in% c("Tier 1.0")]$variantKey))
+  length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Variant.Tier %in% c("Tier 1.1")]$variantKey))
+  length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Variant.Tier %in% c("Tier 1.2")]$variantKey))
+  length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Variant.Tier %in% c("Tier 1.3")]$variantKey))
+  length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Variant.Tier %in% c("Tier 1.4")]$variantKey))
+  length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Variant.Tier %in% c("Tier 2")]$variantKey))
+  length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Variant.Tier %in% c("Tier 3")]$variantKey))
+  length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF[ Variant.Tier %in% c("Tier 4")]$variantKey))
+ 
+ 
+ 
+ 
+ 
+  sampleList.v15 <- read.csv("../RNASeq.Mutation.data/SampleList_Final_V15_makePaths_caseIDCorrected.txt", sep="\t", header = T)
+  oldMetaDAta <- rnaseqMutationProject$validMetaDataDF
+  
+  removedSamples <- oldMetaDAta[which(! oldMetaDAta$Sample.Data.ID %in% sampleList.v15$SampleID),]
+ 
+ 
+ 
+ old.V1 <- readRDS("../RNASeq.Mutation.data/outputRDSOutput/1.All.variants.RDS")
+ New.V1 <- readRDS("../RNASeq.Mutation.data/outputRDSOutput/1.All.variants.v2.RDS")
+ variantsAbsentInNew <- old.V1[ which(!old.V1$variantKey %in% New.V1$variantKey),] %>% dplyr::filter(Variant.Tier %in% c("Tier 1.1")); dim(variantsAbsentInNew)
+ 
+ 
+ metaData <- read.csv("../RNASeq.Mutation.data/SampleList_Final_V16.txt", sep="\t", header = T)
+ customFun  = function(DF) {
+   printDF <- DF[,c("Patient.ID.In.paper","CaseID")]
+   printDF$rnaseq <- "rnaseq" ; printDF <- printDF %>% distinct()
+   write.table(printDF,paste0("../RNASeq.Mutation.data/",unique(DF$Patient.ID.In.paper),".txt"), sep = "\t", col.names = F, row.names = F, quote = F)
+   return(printDF)
+ }
+ 
+ metaData %>% 
+   group_by(Patient.ID.In.paper) %>% 
+   do(customFun(.))
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
  
  
  

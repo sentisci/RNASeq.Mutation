@@ -52,8 +52,9 @@ ProjectSetUp <- R6Class(
       }
       print(paste0("Dimension of metadata after applying parameter 'factorsToExclude' is ", paste(dim(self$metaDataDF)[1])))
       print("Make R valid names in the metadata file and storing it as validMetaDataDF")
-      tempDF <- as.data.frame(lapply(self$metaDataDF[,c("Patient.ID","Sample.Data.ID","Sample.ID","Sample.ID.Alias")], make.names)) %>% data.frame()
-      self$validMetaDataDF <- cbind(tempDF, self$metaDataDF[,which(names(self$metaDataDF) != c("Patient.ID","Sample.Data.ID","Sample.ID","Sample.ID.Alias"))])
+      tempDF <- as.data.frame(lapply(self$metaDataDF[,c("Patient.ID","Sample.Data.ID","Sample.ID","Sample.ID.Alias")], make.names)) %>% data.frame() %>%
+                                    dplyr::rename(valid.Sample.ID=Sample.ID)
+      self$validMetaDataDF <- cbind(tempDF, self$metaDataDF[,which(! names(self$metaDataDF) %in% c("Patient.ID","Sample.Data.ID","Sample.ID.Alias"))])
     },
     readAnnotation = function() {
       self$annotationDF <- readRDS(self$annotationRDS) %>% as.data.frame()
@@ -166,7 +167,7 @@ CoreUtilities <- R6Class(
     readTXTFiles  = function(x, fileSuffix=NA ){ ##, colNameSelect=NA, primaryID=NA ){
       if(!is.na(fileSuffix)) 
       {
-        sampleName <- gsub(fileSuffix, "", basename(x)) 
+        sampleName <- gsub(paste0("_[0-9]*",fileSuffix), "", basename(x)) 
       } else { 
         sampleName <- basename(x) 
       }
@@ -184,9 +185,12 @@ CoreUtilities <- R6Class(
     },
     ## Merge CSV or TXT files
     mergeTXTFiles = function( x, fileSuffix=NA ){
-      selectedFileList       <- x[which(basename(x) %in% self$allFileList)]
-      notselectedFileList    <- x[which(!basename(x) %in% self$allFileList)]
-      if( length(notselectedFileList) > 1 ) { stop(paste(" couldn't retrived following files. Please check the file names or suffix "
+      
+      print(paste(" Total files in the input folder ", length(x)))
+      selectedFileList       <- x[which(basename(x) %in% self$allFileList)]; print(length(selectedFileList))
+      notselectedFileList    <- x[which(!basename(x) %in% self$allFileList)]; print(length(notselectedFileList))
+      if( length(notselectedFileList) >= 1 ) { stop(paste(" Following files are not present in metadata File.Please record them in metadata file
+                                                         or remove from the input file folder"
                                                                      ,paste(basename(notselectedFileList), collapse = "\n")))}
       
       print(paste0("Selecting ", length(selectedFileList), " files out of ", length(x), " from the given folder"))
@@ -249,7 +253,7 @@ CoreUtilities <- R6Class(
       # } 
       # if(isRowNames) assert_that(!is.na(rowNamesColInFile), msg= "Please provide row names index , \"rowNamesColInFile\" can't be NA ")
       
-      self$allFileList = paste0(as.character(metadata[,metadataFileRefCol]),fileSuffix)
+      self$allFileList = paste0(as.character(metadata[,metadataFileRefCol]),"_",as.character(metadata[,"Case.ID"]),fileSuffix)
       print(paste0("Total unique entries in the metadata's reference column are ",length(unique(self$allFileList))))
       
       dirs                <- list.dirs(paste0(self$workDir,"/",self$projectName,"/",dir))[-1]
