@@ -117,29 +117,38 @@ unique(mergeVCFObjectDiagnosis$Exonic.function); unique(mergeVCFObjectDiagnosis$
 mergeVCFObjectDiagnosis[, (c("MAF", "VAF")) := replace(.SD, is.na(.SD), 0), .SDcols = c("MAF", "VAF")]; dim(mergeVCFObjectDiagnosis)
 
 ## 1c
-mergeVCFObjectDiagnosis <- mergeVCFObjectDiagnosis %>% dplyr::filter(! Patient.ID %in% c("NA.") ) %>% 
+## SNVs and Indels
+mergeVCFObjectDiagnosisVA <- mergeVCFObjectDiagnosis %>% dplyr::filter(! Patient.ID %in% c("NA.") ) %>% 
                                                        dplyr::filter(! Exonic.function %in% c("ncRNA_exonic","ncRNA_splicing",
                                                                                      "ncRNA_intronic","-","intergenic",
-                                                                                     "synonymous SNV")) %>% 
-                                                       data.table()
+                                                                                     "synonymous SNV")) %>% data.table()
+## Cosmic 
+mergeVCFObjectDiagnosisCosmic <- mergeVCFObjectDiagnosis %>% dplyr::filter(! Patient.ID %in% c("NA.") ) %>% 
+                                                       dplyr::filter(! Exonic.function %in% c("ncRNA_exonic","ncRNA_splicing",
+                                                                                     "ncRNA_intronic","-","intergenic")) %>% data.table()
+## Printing
+print(paste(" Total Variants in the cohort after removing non-coding,splicing aand intronic: ", length(mergeVCFObjectDiagnosisVA$variantKey), 
+            " & Total Variants in the cohort after removing non-coding,splicing aand intronic: ", length(unique(mergeVCFObjectDiagnosisVA$variantKey))))
+
+## Print & Save
+saveRDS(mergeVCFObjectDiagnosisVA,
+        paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirRDSDir, "1.All.variants.cosmic.v3.RDS", sep="/"))
+write.table(mergeVCFObjectDiagnosisVA, 
+            paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, "1.All.variants.cosmic.v3.txt", sep="/"),
+            sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+
 ## 1d
 ## Separate Normal variants into different DF
-mergeVCFObject.variantKey.Normal <- mergeVCFObjectDiagnosis[ LIBRARY_TYPE %in% c("Normal") ]
+mergeVCFObject.variantKey.Normal <- mergeVCFObjectDiagnosisVA[ LIBRARY_TYPE %in% c("Normal") ]
 dim(mergeVCFObject.variantKey.Normal); length(unique(mergeVCFObject.variantKey.Normal$variantKey))
 
 ## Separate Tumor variants into different DF
-mergeVCFObject.variantKey.Tumor <- mergeVCFObjectDiagnosis[ !LIBRARY_TYPE %in% c("Normal") ]
+mergeVCFObject.variantKey.Tumor <- mergeVCFObjectDiagnosisVA[ !LIBRARY_TYPE %in% c("Normal") ]
 dim(mergeVCFObject.variantKey.Tumor); length(unique(mergeVCFObject.variantKey.Tumor$variantKey))
 
 ## filter the Normal variants from Tumor DF
 TumorFiltered.Normal <- mergeVCFObject.variantKey.Tumor[ !variantKey %in% mergeVCFObject.variantKey.Normal$variantKey ];setkey(TumorFiltered.Normal, variantKey)
 dim(TumorFiltered.Normal); length(unique(TumorFiltered.Normal$variantKey))
-## Save ##
-saveRDS(TumorFiltered.Normal, 
-        paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, "2.MAF.LT.5pc_No.NS.v2.RDS", sep="/"))
-write.table(TumorFiltered.Normal, 
-            paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, "2.MAF.LT.5pc_No.NS.v2.txt", sep="/"),
-            sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 ## 1e
 ## Updating the empty values in Tier column with "NA"
@@ -147,8 +156,8 @@ TumorFiltered.Normal$Somatic.Tier[TumorFiltered.Normal$Somatic.Tier==""] <- "NA"
 TumorFiltered.Normal$Germline.Tier[TumorFiltered.Normal$Germline.Tier ==""] <- "NA"
 
 ## Printing
-print(paste(" Total Variants in the cohort after removing non-coding,splicing aand intronic: ", length(TumorFiltered.Normal$variantKey), 
-            " & Total Variants in the cohort after removing non-coding,splicing aand intronic: ", length(unique(TumorFiltered.Normal$variantKey))))
+print(paste(" Total Variants in the cohort after removing Normal variants: ", length(TumorFiltered.Normal$variantKey), 
+            " & Total Variants in the cohort after removing Normal variants : ", length(unique(TumorFiltered.Normal$variantKey))))
 
 ## Step 2 Add the smallest Tier
 ## Using R environment ( fastest )
@@ -161,9 +170,16 @@ for ( i in 1:nrow(TumorFiltered.Normal)) {
 })
 
 ## Save it as it takes long time ( More effeicient solution needed )
-saveRDS(Variant.Tier, "./Variant.Tier.rds")
-#Variant.Tier <- readRDS("./Variant.Tier.rds")
+#saveRDS(Variant.Tier, "./Variant.Tier.rds")
+Variant.Tier <- readRDS("./Variant.Tier.rds")
 TumorFiltered.Normal$Variant.Tier <- unlist(Variant.Tier)
+
+## Print & Save
+saveRDS(TumorFiltered.Normal, 
+        paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirRDSDir, "2.Tumor_CellLine_Variants.cosmic.v3.RDS", sep="/"))
+write.table(TumorFiltered.Normal, 
+            paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, "2.Tumor_CellLine_Variants.cosmic.v3.txt", sep="/"),
+            sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 ## Step 3 Calculate the frequency at Patient and Sample level fro Tumor and CellLine Cohort Only
 variantsFreqInCohort = TumorFiltered.Normal[, .(variantInSamples = .N, 
@@ -174,31 +190,46 @@ variantsFreqInCohort = TumorFiltered.Normal[, .(variantInSamples = .N,
 setkey(variantsFreqInCohort, variantKey)
 variantsFreqInCohort <- variantsFreqInCohort[order(-propInAllPatients),]
 dim(variantsFreqInCohort); head(variantsFreqInCohort)
-
+## Merge Frequency df with main df
 TumorFiltered.Normal.freq <- merge( TumorFiltered.Normal, variantsFreqInCohort, by="variantKey" ); dim(TumorFiltered.Normal.freq)
-
-saveRDS(TumorFiltered.Normal.freq,
-         paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirRDSDir, "1.All.variants.v2.RDS", sep="/"))
-write.table(TumorFiltered.Normal.freq, 
-            paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, "1.All.variants.v2.txt", sep="/"),
-            sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 ## Sanity Check: Testing the "fkt" columns
 min(TumorFiltered.Normal.freq$Total.coverage); min(TumorFiltered.Normal.freq$Variant.coverage); 
 min(TumorFiltered.Normal.freq$VAF)           ; min(TumorFiltered.Normal.freq$MAF)
 
+saveRDS(TumorFiltered.Normal.freq,
+         paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirRDSDir, "3.Tumor_CellLine_Variants.freq.cosmic.v3.RDS", sep="/"))
+write.table(TumorFiltered.Normal.freq, 
+            paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, "3.Tumor_CellLine_Variants.freq.cosmic.v3.txt", sep="/"),
+            sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 ## STEP 6 filter by VAF, Variant coverage
+## Mutation analysis
 TumorFiltered.Normal.freq.VAF.TC.VC.MAF <- TumorFiltered.Normal.freq[
-                                              Total.coverage >= 10 & Variant.coverage >= 3 & VAF >= 0.10 & MAF <= 0.01 & propInAllPatients <= 0.10 ]
+                                              Total.coverage >= 10 & Variant.coverage >= 3 & VAF >= 0.10 & MAF <= 0.01 & propInAllSamples <= 0.10 ]
+## Neoantigen analysis
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Neoantigen <- TumorFiltered.Normal.freq[
+                                              Total.coverage >= 10 & Variant.coverage >= 3 & VAF >= 0.10 & MAF <= 0.0001 & propInAllSamples <= 0.10 ]
+
 dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF);length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF$variantKey))
-                                                    
+dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Neoantigen);length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Neoantigen$variantKey))
+                    
+
+## Print and Save files                                
 saveRDS(TumorFiltered.Normal.freq.VAF.TC.VC.MAF, 
-            paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
-                  "3.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10pc.v2.RDS", sep="/"))
+            paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirRDSDir, 
+                  "4.Tumor_CellLine_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10pc.cosmic.v3.RDS", sep="/"))
 write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF, 
             paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
-                  "3.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10pc.v2.txt", sep="/"),
+                  "4.Tumor_CellLine_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10pc.cosmic.v3.txt", sep="/"),
+            sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+
+saveRDS(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Neoantigen, 
+        paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirRDSDir, 
+              "4.Tumor_CellLine_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.10e4_propInTumor.LTE.10pc.Neoantigen.v3.RDS", sep="/"))
+write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Neoantigen, 
+            paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
+                  "4.Tumor_CellLine_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.10e4_propInTumor.LTE.10pc.Neoantigen.v3.txt", sep="/"),
             sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 ## STEP 7 filter by population filter 
@@ -210,7 +241,7 @@ write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF,
 ## Type of Tiering
 # Tier <- "Germline.Tier"
 # Tier <- "Somatic.Tier"
-Tier <- "Variant.Tier"
+# Tier <- "Variant.Tier"
 
 ## No Tier
 TumorFiltered.Normal.freq.VAF.TC.VC.MAF.NoTier <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF %>% filter_(.dots=paste0(Tier, " %in%  c(\"NA\", \"\")"))
@@ -252,23 +283,23 @@ paste0( "Total Variants ", dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier4)[1]
 ## Writing files
 write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.NoTier, 
             paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
-                  "4a.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10.NoTier.v2.txt", sep="/"),
+                  "5a.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10.NoTier.v2.txt", sep="/"),
             sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1, 
             paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
-                  "4b.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10.Tier1.v2.txt", sep="/"),
+                  "5b.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10.Tier1.v2.txt", sep="/"),
             sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier2, 
             paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
-                  "4c.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10.Tier2.v2.txt", sep="/"),
+                  "5c.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10.Tier2.v2.txt", sep="/"),
             sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier3, 
             paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
-                  "4d.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10.Tier3.v2.txt", sep="/"),
+                  "5d.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10.Tier3.v2.txt", sep="/"),
             sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier4, 
             paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
-                  "4e.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10.Tier4.v2.txt", sep="/"),
+                  "5e.MAF.LT.5pc_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10.Tier4.v2.txt", sep="/"),
             sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 
