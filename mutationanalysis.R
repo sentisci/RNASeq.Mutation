@@ -37,7 +37,7 @@ rnaseqMutationProject <- ProjectSetUp$new(
 
   outputPrefix            = "_rnaseq.annotated.vcf",
   factorName              = "PATIENT.ID",
-  metaDataFileName        = "MetadataMapper.v2.txt",
+  metaDataFileName        = "MetadataMapper.v3.txt",
   outputdirRDSDir         = "outputRDSOutput",
   outputdirTXTDir         = "outputTXTOutput",
   plotsDir                = "Figures",
@@ -93,12 +93,12 @@ paste0( "Total Variants in the cohort ", dim(mergeVCFObjectDiagnosis)[1],
 mergeVCFObjectDiagnosis <- mergeVCFObjectDiagnosis %>% dplyr::filter(!Sample.ID %in% df_NA_TRUE$Sample.ID) %>% data.table()
 
 ## Sanity Check : match the samples & patient in the vcf files with the metadata
-patientsEqual = length(unique(mergeVCFObjectDiagnosis$Patient.ID)) == length(unique(rnaseqMutationProject$metaDataDF$Patient.ID))
-samplesEqual  = length(unique(mergeVCFObjectDiagnosis$Sample.ID)) == length(unique(rnaseqMutationProject$metaDataDF$Sample.ID))
+patientsEqual = length(unique(mergeVCFObjectDiagnosis$Patient.ID)) == length(unique(rrnaseqMutationProject$validMetaDataDF$Patient.ID$Patient.ID))
+samplesEqual  = length(unique(mergeVCFObjectDiagnosis$Sample.ID)) == length(unique(rrnaseqMutationProject$validMetaDataDF$Patient.ID$Sample.ID))
 
 if(! patientsEqual | ! samplesEqual ) { stop(paste0("Mismatch of Patients and/or Samples between VCF files and Metadata file !! ",
                                                        ", Total patients from VCF: ", length(unique(mergeVCFObjectDiagnosis$Patient.ID)),
-                                                       ", Total patients from Metadata: ", length(unique(rnaseqMutationProject$metaDataDF$Patient.ID)),
+                                                       ", Total patients from Metadata: ", length(unique(rrnaseqMutationProject$validMetaDataDF$Patient.ID$Patient.ID)),
                                                        ", Total samples from VCF: ", length(unique(mergeVCFObjectDiagnosis$Sample.ID)),
                                                        ", Total samples from Metadata: ", length(unique(mergeVCFObjectDiagnosis$Sample.ID)))) }
 totalPatients <- length(unique(mergeVCFObjectDiagnosis$Patient.ID))

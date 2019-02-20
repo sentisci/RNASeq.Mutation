@@ -165,6 +165,7 @@ CoreUtilities <- R6Class(
   private   = list(
     ## Read TXT Files
     readTXTFiles  = function(x, fileSuffix=NA ){ ##, colNameSelect=NA, primaryID=NA ){
+      print(x)
       if(!is.na(fileSuffix)) 
       {
         sampleName <- gsub(paste0("_[0-9]*",fileSuffix), "", basename(x)) 
