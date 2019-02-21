@@ -93,12 +93,12 @@ paste0( "Total Variants in the cohort ", dim(mergeVCFObjectDiagnosis)[1],
 mergeVCFObjectDiagnosis <- mergeVCFObjectDiagnosis %>% dplyr::filter(!Sample.ID %in% df_NA_TRUE$Sample.ID) %>% data.table()
 
 ## Sanity Check : match the samples & patient in the vcf files with the metadata
-patientsEqual = length(unique(mergeVCFObjectDiagnosis$Patient.ID)) == length(unique(rrnaseqMutationProject$validMetaDataDF$Patient.ID$Patient.ID))
-samplesEqual  = length(unique(mergeVCFObjectDiagnosis$Sample.ID)) == length(unique(rrnaseqMutationProject$validMetaDataDF$Patient.ID$Sample.ID))
+patientsEqual = length(unique(mergeVCFObjectDiagnosis$Patient.ID)) == length(unique(rnaseqMutationProject$validMetaDataDF$Patient.ID))
+samplesEqual  = length(unique(mergeVCFObjectDiagnosis$Sample.ID)) == length(unique(rnaseqMutationProject$validMetaDataDF$Sample.ID))
 
 if(! patientsEqual | ! samplesEqual ) { stop(paste0("Mismatch of Patients and/or Samples between VCF files and Metadata file !! ",
                                                        ", Total patients from VCF: ", length(unique(mergeVCFObjectDiagnosis$Patient.ID)),
-                                                       ", Total patients from Metadata: ", length(unique(rrnaseqMutationProject$validMetaDataDF$Patient.ID$Patient.ID)),
+                                                       ", Total patients from Metadata: ", length(unique(rnaseqMutationProject$validMetaDataDF$Patient.ID)),
                                                        ", Total samples from VCF: ", length(unique(mergeVCFObjectDiagnosis$Sample.ID)),
                                                        ", Total samples from Metadata: ", length(unique(mergeVCFObjectDiagnosis$Sample.ID)))) }
 totalPatients <- length(unique(mergeVCFObjectDiagnosis$Patient.ID))
@@ -170,8 +170,8 @@ for ( i in 1:nrow(TumorFiltered.Normal)) {
 })
 
 ## Save it as it takes long time ( More effeicient solution needed )
-#saveRDS(Variant.Tier, "./Variant.Tier.rds")
-Variant.Tier <- readRDS("./Variant.Tier.rds")
+saveRDS(Variant.Tier, "./Variant.Tier.rds")
+#Variant.Tier <- readRDS("./Variant.Tier.rds")
 TumorFiltered.Normal$Variant.Tier <- unlist(Variant.Tier)
 
 ## Print & Save
@@ -241,7 +241,7 @@ write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Neoantigen,
 ## Type of Tiering
 # Tier <- "Germline.Tier"
 # Tier <- "Somatic.Tier"
-# Tier <- "Variant.Tier"
+Tier <- "Variant.Tier"
 
 ## No Tier
 TumorFiltered.Normal.freq.VAF.TC.VC.MAF.NoTier <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF %>% filter_(.dots=paste0(Tier, " %in%  c(\"NA\", \"\")"))
