@@ -135,10 +135,10 @@ print(paste(" Total Variants in the cohort after removing non-coding,splicing aa
             " & Total Variants in the cohort after removing non-coding,splicing aand intronic: ", length(unique(mergeVCFObjectDiagnosisCosmic$variantKey))))
 
 ## Print & Save
-saveRDS(mergeVCFObjectDiagnosisCosmic,
-        paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirRDSDir, "1.All.variants.v3.cosmic.RDS", sep="/"))
-write.table(mergeVCFObjectDiagnosisCosmic, 
-            paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, "1.All.variants.v3.cosmic.txt", sep="/"),
+saveRDS(mergeVCFObjectDiagnosisVA,
+        paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirRDSDir, "1.All.variants.v3.RDS", sep="/"))
+write.table(mergeVCFObjectDiagnosisVA, 
+            paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, "1.All.variants.v3.txt", sep="/"),
             sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 ## 1d
@@ -174,8 +174,8 @@ for ( i in 1:nrow(TumorFiltered.Normal)) {
 })
 
 ## Save it as it takes long time ( More effeicient solution needed )
-## saveRDS(Variant.Tier, "./Variant.Tier.cosmic.rds")
-Variant.Tier <- readRDS("./Variant.Tier.rds")
+saveRDS(Variant.Tier, "./Variant.Tier.cosmic.rds")
+## Variant.Tier <- readRDS("./Variant.Tier.rds")
 TumorFiltered.Normal$Variant.Tier <- unlist(Variant.Tier)
 
 ## Print & Save
@@ -209,38 +209,44 @@ write.table(TumorFiltered.Normal.freq,
 
 ## STEP 6 filter by VAF, Variant coverage
 ## Mutation analysis
-TumorFiltered.Normal.freq.VAF.TC.VC.MAF.indels <- TumorFiltered.Normal.freq[
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF <- TumorFiltered.Normal.freq[
                                                     Total.coverage >= 10 & 
                                                     Variant.coverage >= 3 & 
                                                     VAF >= 0.10 & 
                                                     MAF <= 0.01 & 
-                                                    propInAllSamples <= 0.10 ][ 
-                                                    
-                                                    any( Exonic.function %in% 
-                                                         c("frameshift deletion","frameshift insertion",
-                                                               "nonframeshift deletion","nonframeshift insertion") & 
-                                                         propInAllPatients <= 0.01) 
-                                                    
-                                                   ]
+                                                    propInAllSamples <= 0.10 ]
+
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.HighConfIndels <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF[which( Exonic.function %in% 
+                                                                                                             c("frameshift deletion","frameshift insertion",
+                                                                                                               "nonframeshift deletion","nonframeshift insertion") & 
+                                                                                                             propInAllPatients <= 0.01 ), ]
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.HighConfSNVs <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF[which( Exonic.function %in% c("splicing", "nonsynonymous SNV", "stopgain", "stoploss", "intronic", "UTR3")), ]
+
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.indels <- rbind(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.HighConfSNVs, TumorFiltered.Normal.freq.VAF.TC.VC.MAF.HighConfIndels)
+
 ## Review the above step
 dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.indels)
 length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.indels$variantKey))
 unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.indels$Exonic.function)
 
 ## Neoantigen analysis
-TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Neoantigen.indels <- TumorFiltered.Normal.freq[
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Neoantigen <- TumorFiltered.Normal.freq[
                                                   Total.coverage >= 10 & 
                                                   Variant.coverage >= 3 & 
                                                   VAF >= 0.10 & 
                                                   MAF <= 0.0001 & 
-                                                  propInAllSamples <= 0.10 ][ 
-                                                      
-                                                      any( Exonic.function %in% 
-                                                             c("frameshift deletion","frameshift insertion",
-                                                               "nonframeshift deletion","nonframeshift insertion") & 
-                                                             propInAllPatients <= 0.01) 
-                                                      
-                                                      ]
+                                                  propInAllSamples <= 0.10 ]
+
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Neoantigen.HighConfIndels <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Neoantigen[which( Exonic.function %in% 
+                                                                                                           c("frameshift deletion","frameshift insertion",
+                                                                                                             "nonframeshift deletion","nonframeshift insertion") & 
+                                                                                                           propInAllPatients <= 0.01 ), ]
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Neoantigen.HighConfSNVs <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Neoantigen[which( Exonic.function %in% c("splicing", "nonsynonymous SNV", "stopgain", "stoploss", "intronic", "UTR3")), ]
+
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Neoantigen.indels <- rbind(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Neoantigen.HighConfIndels, 
+                                                                   TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Neoantigen.HighConfSNVs )
+
+
 ## Review the above step
 dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Neoantigen.indels);
 length(unique(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Neoantigen.indels$variantKey))
