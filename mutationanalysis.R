@@ -476,5 +476,52 @@ StackedBar <- ggplot(mutationType.RM.Single.tidy.log, aes(x=Gene, y=Percent, fil
 ## Bind both of them
 ggarrange(HeatMap, StackedBar, ncol=2)
 
+################### Neo-antigen analysis #######################
+
+#### STEP 1 : Make filtered VCF files #####
+
+## Read the selected variant dataset which has variants across all samples in the study cohort.
+filtered.Final.VCF <- read.csv("C:/Users/sindiris/R Scribble/RNASeq.Mutation.data/FigureData/4.Tumor_CellLine_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.10e4_propInTumor.LTE.10pc.Indels.LTE.1pc.Neoantigen.v3.txt",
+                                 sep="\t", header = T)
+
+## List all samples in the study cohort
+allSamples <- unique(as.character(filtered.Final.VCF$Sample.ID))
+## Convert actual sampleIDs to Biowulf sampleIDs
+sampleIDs.DF <- rnaseqMutationProject$metaDataDF %>% dplyr::filter(Sample.ID %in%  allSamples ) %>% dplyr::select(Sample.ID, Sample.Biowulf.ID)
+
+## Custom function to subset raw vcf to new vcf with selected variants only.
+filterRawVCFForVariants <- function(x){
+  sampleids=x
+  ## start analysis for only one sample
+  sample.filtered.vcf  <- filtered.Final.VCF %>% dplyr::filter(Sample.ID == x[1] ); 
+  totalVariantsFinal = dim(sample.filtered.vcf)
+
+  ## Read the raw vcf
+  rawVCF <- readVcf(paste0("K:/projects/Sivasish/pvactools/VariantVCFs/",x[2], ".HC_RNASeq.raw.vcf") )
+  
+  ## Method 1 Subsetting / Filtering 
+  ### Filter criteria
+  q=GRanges(seqnames=sample.filtered.vcf$Chr,
+            ranges=IRanges(start=sample.filtered.vcf$Start, end = sample.filtered.vcf$End))
+  filteredVCF <- subsetByOverlaps(rawVCF, q); rowRanges(filteredVCF)
+  totalVariantsRaw = dim(filteredVCF)
+  
+  ## Sanity Check
+  ## The range of indel will be different in vcf file vs annotated vcf file.
+  ## if ( totalVariantsFinal[1] != totalVariantsRaw[1] ) stop("Variants doesn't match")
+  
+  print(paste(x[1], x[2], paste0(" Variants in filtered file ", totalVariantsFinal[1], collapse = ":"), 
+                 paste0(" Variants in raw file ", totalVariantsRaw[1], collapse = ":")))
+  ### Writing the filtered raw VCF file
+  writeVcf(filteredVCF, paste0("C:/Users/sindiris/R Scribble/RNASeq.Mutation.data/FigureData/filteredvcfs/",x[2], "filtered.raw.vcf") )
+}
+
+## Execute the above function: To create  new vcfs for all samples present in the input file
+outlist <- apply(sampleIDs.DF, 1, filterRawVCFForVariants)
+
+
+
+
+
 
 

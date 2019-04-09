@@ -1,11 +1,11 @@
 #   ####  Scientific Packages #### 
-source("https://bioconductor.org/biocLite.R")
+# source("https://bioconductor.org/biocLite.R")
+# install.packages("BiocManager")
 library(ape)
 library(amap)
 library(calibrate)
 library(edgeR)
 library(DESeq2)
-library(DESeq)
 library(vsn)
 library(GSVA)
 library(GSEABase)
@@ -16,3 +16,8 @@ library(psych)
 library(tibble)
 library(fgsea)
 library(limma)
+library(VariantAnnotation)
+
+# BiocManager::install(c("ape", "amap", "calibrate", "edgeR", "DESeq2", "vsn", "GSVA",
+#                    "GSEABase", "MASS", "rgl", "sparcl", "psych", "tibble", "fgsea",
+#                    "limma"))
