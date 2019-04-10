@@ -520,6 +520,10 @@ filterRawVCFForVariants <- function(x){
 outlist <- apply(sampleIDs.DF, 1, filterRawVCFForVariants)
 
 
+#### STEP 2 : Make HLA string 
+
+
+
 
 
 
