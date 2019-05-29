@@ -357,6 +357,10 @@ write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.DiseaseCausing,
 TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1 %>% filter(LIBRARY_TYPE %in% c("Tumor", "CellLine"))
 dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor)
 
+###### OR get reviewd & selected variants from a file #######
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor <- read.csv("../RNASeq.Mutation.data/Fig1_manual_filter_tier1_minusfaultygermline_addselectTier2Tier3_indelback_05_21_19_manual_indel_splice_Selected.txt",
+                                                                  sep="\t", header = T)
+
 ## Sample statistics
 SampleStatsMut.Tumor <- rnaseqMutationProject$validMetaDataDF %>% dplyr::filter(LIBRARY_TYPE %in% c("Tumor", "CellLine")) %>% dplyr::select(DIAGNOSIS.Alias) %>% 
                               dplyr::group_by(DIAGNOSIS.Alias) %>% 
@@ -414,11 +418,13 @@ mutationFreqPer.RM.Single.tidy.log <- gather(mutationFreqPer.RM.Single, key="Dia
                 Gene = factor(Gene, levels=rev(mutationFreqPer.RM.Single$Gene))
                 )
 
-
 ## Main heatmap
-HeatMap <- ggplot(mutationFreqPer.RM.Single.tidy.log, aes(Diagnosis,Gene)) + 
+test <- mutationFreqPer.RM.Single.tidy.log
+test$Frequency <- log2(test$Frequency + 1)
+HeatMap <- ggplot(test, aes(Diagnosis,Gene)) + 
   geom_tile(aes(fill = Frequency), colour = "grey") + 
-  scale_fill_gradient(low = "white",high = "darkred", name="Fraction of patients") +
+  scale_fill_gradient(low = "white",high = "darkred", name="Fraction of patients", 
+                      breaks=c(0,1,2,3,4,5,6),labels=c(0, 10, 20, 30, 40, 50, 60)) +
   scale_x_discrete(expand = c(0, 0)) +
   #scale_y_discrete(expand = c(0, 0)) +
   theme(panel.background = element_blank(),
@@ -432,14 +438,14 @@ HeatMap <- ggplot(mutationFreqPer.RM.Single.tidy.log, aes(Diagnosis,Gene)) +
 
 ## Side Frequency Plot
 mutationType.RM.Single <- mutationFreqPer %>% filter(Sum >=2) %>% arrange(desc(Sum)) %>% dplyr::select(c(1,16:22))
-mutationType.RM.Single.tidy.log <- gather(mutationType.RM.Single, key="Type", value="Percent", 2:7) %>% 
-  mutate(Percent = Percent,
-         Gene = factor(Gene, levels=rev(mutationFreqPer.RM.Single$Gene)),
+mutationType.RM.Single.tidy.log <- gather(mutationType.RM.Single, key="Type", value="Counts", 2:8) %>% 
+  mutate(Counts = Counts,
+         Gene = factor(Gene, levels=rev(mutationFreqPer.RM.Single$Gene),ordered = TRUE),
          Type      = factor(Type,
                             levels = c("stopgain","splicing",
                                        "frameshift.insertion","frameshift.deletion",
                                        "nonframeshift.deletion","nonframeshift.insertion",
-                                       "nonsynonymous.SNV"), ordered = TRUE)) %>% 
+                                       "nonsynonymous.SNV"),ordered = TRUE)) %>% 
   dplyr::arrange(desc(Gene), Type)
 head(mutationType.RM.Single.tidy.log)
 
@@ -453,7 +459,7 @@ myColors <- setNames( c("#31a354", "#d2a679", "#7094db", "#669999", "#bf4040", "
 customColors <- myColors
 
 ## green orange/brown violet red brinjal skyblue
-StackedBar <- ggplot(mutationType.RM.Single.tidy.log, aes(x=Gene, y=Percent, fill=Type) ) +
+StackedBar <- ggplot(mutationType.RM.Single.tidy.log, aes(x=Gene, y=Counts, fill=Type) ) +
   #ggplot(mutationType.RM.Single.tidy.log, aes(x=Gene, y=Percent, fill=Type) ) +
   geom_bar(stat="identity") + coord_flip() +
   scale_fill_manual(values = customColors, name = "Mutation Type", 
@@ -471,10 +477,14 @@ StackedBar <- ggplot(mutationType.RM.Single.tidy.log, aes(x=Gene, y=Percent, fil
         axis.title.y=element_blank(),
         #legend.position="bottom",
         legend.key.width =unit(3,"line")) +
-  scale_y_continuous(minor_breaks = seq(0,30,5))
+  scale_y_continuous(minor_breaks = seq(0,105,10))
 
 ## Bind both of them
 ggarrange(HeatMap, StackedBar, ncol=2)
+
+pdf("C:/Users/sindiris/R Scribble/RNASeq.Mutation.data/Figures/Figure.1b.Variant_percentage_and_count.pdf", height = 25, width = 10 )
+ggarrange(HeatMap, StackedBar, ncol=2)
+dev.off()
 
 ################### Neo-antigen analysis #######################
 
@@ -485,7 +495,7 @@ filtered.Final.VCF <- read.csv("C:/Users/sindiris/R Scribble/RNASeq.Mutation.dat
                                  sep="\t", header = T)
 
 ## List all samples in the study cohort
-allSamples <- unique(as.character(filtered.Final.VCF$Sample.ID))
+allSamples <- unique(as.character(filtered.Final.VCF$Sample.ID)) ; length(allSamples)
 ## Convert actual sampleIDs to Biowulf sampleIDs
 sampleIDs.DF <- rnaseqMutationProject$metaDataDF %>% dplyr::filter(Sample.ID %in%  allSamples ) %>% dplyr::select(Sample.ID, Sample.Biowulf.ID)
 
@@ -522,7 +532,12 @@ outlist <- apply(sampleIDs.DF, 1, filterRawVCFForVariants)
 
 #### STEP 2 : Make HLA string 
 
+## Read HLA file and generate pvacSeqCommand
+eachSampleHLA <- read.csv("C:/Users/sindiris/R Scribble/RNASeq.Mutation.data/FigureData/HLAFiles/ASPS001tumor_T_D1PR6ACXX.Calls.txt", sep="\t", header = T)
 
+apply(eachSampleHLA,1, function(x){
+  if(x[2] != "" & x[3])
+})
 
 
 
