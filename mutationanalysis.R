@@ -438,7 +438,7 @@ write.table(mutationFreqPer,
             sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 
-mutationFreqPer.RM.Single <- mutationFreqPer %>% filter(Sum >=2) %>% dplyr::select(1:14)
+mutationFreqPer.RM.Single <- mutationFreqPer %>% filter(Sum >=3) %>% dplyr::select(1:14)
 dim(mutationFreqPer.RM.Single);View(mutationFreqPer.RM.Single)
 mutationFreqPer.RM.Single.tidy.log <- gather(mutationFreqPer.RM.Single, key="Diagnosis", value="Frequency", 2:14) %>% 
          mutate( 
@@ -517,7 +517,7 @@ StackedBar <- ggplot(mutationType.RM.Single.tidy.log, aes(x=Gene, y=Counts, fill
 ## Bind both of them
 ggarrange(HeatMap, StackedBar, ncol=2)
 
-pdf("C:/Users/sindiris/R Scribble/RNASeq.Mutation.data/Figures/Figure.1b.Variant_percentage_and_count.Tier 1.v8.NL.v2.pdf", height = 25, width = 10 )
+pdf("C:/Users/sindiris/R Scribble/RNASeq.Mutation.data/Figures/Figure.1b.Variant_percentage_and_count.Tier 1.v8.NL.v3.pdf", height = 25, width = 10 )
 ggarrange(HeatMap, StackedBar, ncol=2)
 dev.off()
 
@@ -566,18 +566,152 @@ filterRawVCFForVariants <- function(x){
 outlist <- apply(sampleIDs.DF, 1, filterRawVCFForVariants)
 
 
-#### Neoantigen Post-Processing #####
 
-neoantigenFromVariants <- read.csv("../RNASeq.Mutation.data/successfull.fileList.count.txt", sep = "\t", header = F) %>% data.table()
-colnames(neoantigenFromVariants) <- c("Neoantigens", "Sample.ID")
 
-### Get quartiles
-FirststQu <- as.numeric(trimws(unlist(strsplit(summary(neoantigenFromVariants)[2], ":"))[2])); paste("FirststQu ", FirststQu)
-Median    <- as.numeric(trimws(unlist(strsplit(summary(neoantigenFromVariants)[3], ":"))[2])); paste("Median ", Median)
-thirdQu   <- as.numeric(trimws(unlist(strsplit(summary(neoantigenFromVariants)[5], ":"))[2])); paste("thirdQu ", thirdQu)
 
-neoantigenFromVariants[Neoantigens <= FirststQu ] %>% dim()
-neoantigenFromVariants[Neoantigens > FirststQu & Neoantigens < Median ] %>% dim()
-neoantigenFromVariants[Neoantigens >= thirdQu] %>% dim()
+
+################### Mutation Signature analysis #######################
+library(deconstructSigs)
+mut_data <- readRDS(paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirRDSDir, 
+                          "4.Tumor_CellLine_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10pc.Indels.LTE.1pc.v3.RDS", sep="/"))
+mut_data_sample <- mut_data %>% dplyr::filter(!Sample.ID %in% c("SS019tumor_T_D1UE8ACXX", "NCIEWS5000_T_C28PUACXX", "EWS114tumor_T_C1P2WACXX", "EWS124tumor_T_D1UALACXX"))
+mut_data_sample_input <- mut_data_sample %>% dplyr::select(Sample.ID, Chr, Start, End, Ref, Alt); View(mut_data_sample_input)
+
+## Count total mutations per sample
+mut_data_bySample_Count <- mut_data %>% group_by(Sample.ID) %>% 
+  dplyr::mutate(TotalMutations = n()) %>% 
+  dplyr::select(Sample.ID, DIAGNOSIS.Alias, TotalMutations) %>% 
+  distinct(); View(mut_data_bySample_Count)
+
+## Make input for dConstructSig
+sigs.input <- mut.to.sigs.input(mut.ref = mut_data_sample_input,
+                                sample.id = "Sample.ID",
+                                chr = "Chr",
+                                pos = "Start",
+                                ref = "Ref",
+                                alt = "Alt")
+
+## Total mutations per sample identifies by dConstructSig
+sigs.input.bySample_Sum <- apply(sigs.input, 1, sum) %>% data.frame() %>% 
+  tibble::rownames_to_column(var="Sample.ID"); 
+colnames(sigs.input.bySample_Sum)<- c("Sample.ID", "dConstruct_TotalMutations"); View(sigs.input.bySample_Sum)
+
+## Save the input for deconstructSig
+samples <- rownames(sigs.input)
+write.table(sigs.input , "C:/Users/sindiris/R Scribble/RNASeq.Mutation.data/sigs.input.allSamples.GTE.50.mutations.txt", sep="\t")
+
+## Sanity check; To see the difference in Total mutation count between dConstructSig count vs Actual count
+mut_data_dconst <- dplyr::full_join(mut_data_bySample_Count, sigs.input.bySample_Sum, by="Sample.ID"); View(mut_data_dconst)
+write.table(mut_data_dconst , "C:/Users/sindiris/R Scribble/RNASeq.Mutation.data/Actual_vs_dConst.allSamples.GTE.50.mutations.txt", sep="\t")
+
+## DconstrucSig for all samples using Cosmic signatures as REference
+cosmic_list <- sapply(samples, function(x){
+  cosmic = whichSignatures(tumor.ref = sigs.input,
+                           signatures.ref = signatures.cosmic,
+                           sample.id = x,
+                           contexts.needed = TRUE,
+                           tri.counts.method = 'exome2genome')
+  return(cosmic)
+})
+
+## Extract different items from the above output
+cosmic.df_weights <- do.call(rbind, cosmic_list[1,]); View(cosmic.df_weights)
+cosmic.df_tumor <- do.call(rbind, cosmic_list[2,]); View(cosmic.df_tumor)
+cosmic.df_product <- do.call(rbind, cosmic_list[3,]); View(cosmic.df_product)
+cosmic.df_diff <- do.call(rbind, cosmic_list[4,]); View(cosmic.df_diff)
+cosmic.df_unknown <- do.call(rbind, cosmic_list[5,]); View(cosmic.df_unknown)
+
+### MEthod 1
+## Determine percent mutation contribution by each signature
+# mutation_weight_sum <- sum(as.numeric(unlist(apply(cosmic.df_weights, 2, sum))))
+# cosmic.df_weights_mut <- cosmic.df_weights %>% tibble::rownames_to_column(var = "Sample.ID")
+# cosmic.df_weights_diag <- full_join(cosmic.df_weights_mut, mut_data_bySample_Count, by="Sample.ID")
+# cosmic.df_weights_diag <- cosmic.df_weights_diag[complete.cases(cosmic.df_weights_diag),]
+# 
+# mutation_weight_sum_byDiagnosis <- cosmic.df_weights_diag %>% dplyr::select(-Sample.ID) %>%
+#                                         group_by(DIAGNOSIS.Alias) %>% 
+#                                         summarise_each(sum);
+# mutation_weight_sum_byDiagnosis <- (mutation_weight_sum_byDiagnosis[,-1]/mutation_weight_sum)*100; View(mutation_weight_sum_byDiagnosis)
+
+## MEthod 2
+sigs.input.bySample_Sum_annot <- sigs.input.bySample_Sum %>% tibble::column_to_rownames("Sample.ID")
+weight_mutationCount <- t( sapply(seq(1,784), function(x){
+  return(t(sigs.input.bySample_Sum_annot[x,]*cosmic.df_weights[x,]))
+  #return(t(1*cosmic.df_weights[x,]))
+}) )
+colnames(weight_mutationCount) <- colnames(cosmic.df_weights)
+rownames(weight_mutationCount) <- rownames(cosmic.df_weights)
+#View(weight_mutationCount)
+
+weight_mutationCount_annot <- weight_mutationCount %>% data.frame() %>% tibble::rownames_to_column("Sample.ID")
+weight_mutationCount_final <- dplyr::full_join(weight_mutationCount_annot,mut_data_dconst[,c("Sample.ID", "DIAGNOSIS.Alias")], by="Sample.ID"); 
+View(weight_mutationCount_final)
+
+write.table(weight_mutationCount_final, "../RNASeq.Mutation.data/Weight.txt", sep="\t", quote = FALSE, row.names = FALSE)
+
+weight_mutationCount_final <- weight_mutationCount_final %>% tibble::column_to_rownames("Sample.ID")
+weight_mutationCount_final_freq <- t( apply(weight_mutationCount_final[,-31], 1, function(x){
+  sum = sum(as.numeric(x))
+  fraction = x/sum
+  percent = fraction*100
+  return(percent)
+}))
+
+weight_mutationCount_final_percent <- weight_mutationCount_final_freq[complete.cases(weight_mutationCount_final_freq),]
+View(weight_mutationCount_final_percent)
+
+weight_mutationCount_percent_annot <- weight_mutationCount_final_percent %>% data.frame() %>% tibble::rownames_to_column("Sample.ID")
+weight_mutationCount_percent_annot <- dplyr::full_join(weight_mutationCount_percent_annot,mut_data_dconst[,c("Sample.ID", "DIAGNOSIS.Alias")], by="Sample.ID"); 
+weight_mutationCount_percent_annot <- weight_mutationCount_percent_annot %>% tibble::column_to_rownames("Sample.ID")
+weight_mutationCount_percent_annot <- weight_mutationCount_percent_annot[complete.cases(weight_mutationCount_percent_annot),]
+View(weight_mutationCount_percent_annot)
+
+write.table(weight_mutationCount_percent_annot, "../RNASeq.Mutation.data/Weight_Total_mutations_percent.txt", sep="\t", quote = FALSE )
+
+mutationBurden_By_Diagnosis <- weight_mutationCount_percent_annot %>% dplyr::group_by(DIAGNOSIS.Alias) %>% summarise_each(sum)
+mutationBurden_By_Diagnosis <- mutationBurden_By_Diagnosis %>% tibble::column_to_rownames("DIAGNOSIS.Alias")
+
+write.table(mutationBurden_By_Diagnosis, "../RNASeq.Mutation.data/Total_percent_(contribution)_sum_by_diagnosis.txt", sep="\t", quote = FALSE)
+
+mutationBurden_By_Diagnosis_freq <- t( apply(mutationBurden_By_Diagnosis, 1, function(x){
+  sum = sum(as.numeric(x))
+  fraction = x/sum
+  percent = fraction*100
+  return(percent)
+})) %>% data.frame()
+mutationBurden_By_Diagnosis_freq <- mutationBurden_By_Diagnosis_freq %>% t() %>% data.frame() %>% tibble::rownames_to_column(var="Signatures")
+View(mutationBurden_By_Diagnosis_freq)
+write.table(mutationBurden_By_Diagnosis_freq, "../RNASeq.Mutation.data/Total_(contribution)_sum_by_diagnosis_percent.txt", sep="\t", quote = FALSE)
+
+## Make a bar plot
+mutationBurden_By_Diagnosis_freq[mutationBurden_By_Diagnosis_freq<4]=0
+pallete <- distinctColorPalette(30)
+mutationBurden_By_Diagnosis_freq_tidy <- tidyr::gather(mutationBurden_By_Diagnosis_freq, "Diagnosis", "PercentMutation", 2:15); 
+View(mutationBurden_By_Diagnosis_freq_tidy)
+ggplot(data = mutationBurden_By_Diagnosis_freq_tidy, aes(x = Diagnosis, y = PercentMutation, fill= Signatures )) + 
+  geom_bar(stat="identity") + coord_flip() + scale_fill_manual(values=pallete)
+
+
+
+## Like the above but only for one sample using Cosmic as reference
+cosmic_exp = whichSignatures(tumor.ref = sigs.input,
+                         signatures.ref = signatures.cosmic,
+                         sample.id = "NCI0132tumor4_T_C28D2ACXX",
+                         contexts.needed = TRUE,
+                         tri.counts.method = 'exome2genome')
+
+plotSignatures(cosmic_exp, sub='Mutational Signature Based on COSMIC')
+makePie(cosmic_exp, sub='Mutational Signature Based on COSMIC')
+
+## Like the above but only for one sample using Nature publications as reference
+nature = whichSignatures(tumor.ref = sigs.input,
+                         signatures.ref = signatures.nature2013,
+                         sample.id = "NB2050tumor_T_D1T6TACXX",
+                         contexts.needed = TRUE,
+                         tri.counts.method = 'default')
+
+plotSignatures(nature, sub='Mutational Signature based on Nature 2013--23945592')
+makePie(nature, sub='Mutational Signature based on Nature 2013--23945592')
+
 
 

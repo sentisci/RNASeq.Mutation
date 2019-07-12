@@ -17,6 +17,7 @@ library(tibble)
 library(fgsea)
 library(limma)
 library(VariantAnnotation)
+library(deconstructSigs)
 
 # BiocManager::install(c("ape", "amap", "calibrate", "edgeR", "DESeq2", "vsn", "GSVA",
 #                    "GSEABase", "MASS", "rgl", "sparcl", "psych", "tibble", "fgsea",
