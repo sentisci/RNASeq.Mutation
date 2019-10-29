@@ -566,8 +566,31 @@ filterRawVCFForVariants <- function(x){
 outlist <- apply(sampleIDs.DF, 1, filterRawVCFForVariants)
 
 
+### Neoantigens from Variants
+emptyDF <- data.frame(Gene.Name=c(0), Mutation=c(0), Protein.Position=c("NA"), 
+                      HGVSc=c("NF"), HGVSp=c("NF"), HLA.Allele=c("NF"), MT.Epitope.Seq=c("NF"), 
+                      MT.IC50=c("NF"),	WT.IC50=c("NF"),	Fold.Change=c("NF"),	Tumor.DNA.Depth=c("NF"),
+                      Tumor.DNA.VAF=c("NF"),	Tumor.RNA.Depth=c("NF"),	Tumor.RNA.VAF=c("NF"),	
+                      Gene.Expression=c("NF"),	Score=c("NF")
+)
 
-
+### List files and read data into a single data matrix ####
+folder_name = "C:/Users/sindiris/R Scribble/RNASeq.Mutation.data/mutation_neoantigen_files/"
+fileList <- list.files(folder_name)
+#fileList <- c("convert.Sample_RMS248_C14C7ACXX.clones.txt")
+AllNeoantigenData             <- rbindlist( lapply(fileList, function(x){
+  print(x)
+  exomeData <- read.csv( paste(folder_name, x, sep=""), sep="\t", header = TRUE, fill=TRUE )
+  if(nrow(exomeData)>0){
+    exomeData$SampleName <- x
+  } else {
+    emptyDF$SampleName <- c(x)
+    exomeData <- emptyDF
+  }
+  return(exomeData)
+}) )
+write.table(AllNeoantigenData,"C:/Users/sindiris/R Scribble/RNASeq.Mutation.data/mutation_neoantigen_files/AllNeoantigenData.txt", 
+            sep="\t", col.names = T, row.names = F, quote = F)
 
 
 ################### Mutation Signature analysis #######################
@@ -713,5 +736,32 @@ nature = whichSignatures(tumor.ref = sigs.input,
 plotSignatures(nature, sub='Mutational Signature based on Nature 2013--23945592')
 makePie(nature, sub='Mutational Signature based on Nature 2013--23945592')
 
+#### Retrieving the dataset
+jun.data.set <- read.csv("C:/Users/sindiris/R Scribble/RNASeq.Mutation.data/Fig1_manual_filter_tier1_minusfaultygermline_addselectTier2Tier3_indelback_05_21_19_manual_indel_splice_Selected.txt",
+                         sep="\t", header = TRUE)
+jun.data.set$keyNew <- paste0(jun.data.set$Patient.ID,
+                           jun.data.set$Chr,
+                           jun.data.set$Start,
+                           jun.data.set$End,
+                           jun.data.set$Ref,
+                           jun.data.set$Alt,
+                           jun.data.set$Gene,
+                           jun.data.set$VAF,
+                           jun.data.set$Total.coverage,
+                           jun.data.set$Variant.coverage)
+actual.data.set <- read.csv("C:/Users/sindiris/R Scribble/RNASeq.Mutation.data/outputTXTOutput/4.Tumor_CellLine_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10pc.Indels.LTE.1pc.v3.txt",
+                         sep="\t", header = TRUE)
 
+actual.data.set$keyNew <- paste0(actual.data.set$Patient.ID,
+                           actual.data.set$Chr,
+                           actual.data.set$Start,
+                           actual.data.set$End,
+                           actual.data.set$Ref,
+                           actual.data.set$Alt,
+                           actual.data.set$Gene,
+                           actual.data.set$VAF,
+                           actual.data.set$Total.coverage,
+                           actual.data.set$Variant.coverage)
 
+jun.actual <- dplyr::left_join(jun.data.set, actual.data.set, by="keyNew")
+write.table(jun.actual, "../RNASeq.Mutation.data/jun.actual.retrieved.txt", sep = "\t", quote = FALSE,row.names = F, col.names = T )
