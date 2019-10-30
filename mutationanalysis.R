@@ -749,9 +749,9 @@ jun.data.set$keyNew <- paste0(jun.data.set$Patient.ID,
                            jun.data.set$VAF,
                            jun.data.set$Total.coverage,
                            jun.data.set$Variant.coverage)
+
 actual.data.set <- read.csv("C:/Users/sindiris/R Scribble/RNASeq.Mutation.data/outputTXTOutput/4.Tumor_CellLine_No.NS_TC.GTE.10_VC.GTE.3_VAF.GTE.10pc_MAF.LTE.1pc_propInTumor.LTE.10pc.Indels.LTE.1pc.v3.txt",
                          sep="\t", header = TRUE)
-
 actual.data.set$keyNew <- paste0(actual.data.set$Patient.ID,
                            actual.data.set$Chr,
                            actual.data.set$Start,
@@ -765,3 +765,21 @@ actual.data.set$keyNew <- paste0(actual.data.set$Patient.ID,
 
 jun.actual <- dplyr::left_join(jun.data.set, actual.data.set, by="keyNew")
 write.table(jun.actual, "../RNASeq.Mutation.data/jun.actual.retrieved.txt", sep = "\t", quote = FALSE,row.names = F, col.names = T )
+
+## Primary and relapse
+DRCT001.meta   <- jun.data.set %>% dplyr::filter(Patient.ID.updated == "DRCT001")
+patients <- as.character(unique(DRCT001.meta$Patient.ID))
+DRCT001.actual <- actual.data.set %>% dplyr::filter(Patient.ID %in% patients)
+DRCT001.actual$variantKey <- paste0(DRCT001.actual$Gene, DRCT001.actual$AAChange, sep="_")
+DRCT001.actual$dummyVal <- rep(1, nrow(DRCT001.actual))
+DRCT001.actual.heatmap <- reshape2::dcast(DRCT001.actual, variantKey ~ Sample.ID, value.var = "dummyVal",  fill = 0);
+DRCT001.actual.heatmap$Sum <- apply(DRCT001.actual.heatmap,1, function(x) { 
+  x <- as.numeric(x)
+  return(sum(x[2:length(x)]))
+})
+
+
+
+
+
+
