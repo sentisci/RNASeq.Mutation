@@ -797,10 +797,11 @@ primaryRelapse <- function(x) {
   DRCT001.actual <- actual.data.set %>% dplyr::filter(Patient.ID %in% patients)
   print(dim(DRCT001.actual))
   if(nrow(DRCT001.actual) > 1 ) {
-      DRCT001.actual$variantKey <- paste(DRCT001.actual$Gene, DRCT001.actual$AAChange, sep="__")
+      DRCT001.actual$variantKey <- paste(DRCT001.actual$Gene, paste(DRCT001.actual$Ref, DRCT001.actual$Alt, DRCT001.actual$AAChange,
+                                                                    DRCT001.actual$Start, sep = "/"), sep="#")
       DRCT001.actual$dummyVal <- rep(1, nrow(DRCT001.actual))
       DRCT001.actual.heatmap <- reshape2::dcast(DRCT001.actual, Exonic.function + variantKey ~ Sample.ID, value.var = "dummyVal",  fill = 0);
-      DRCT001.actual.heatmap$Name <- paste(DRCT001.actual.heatmap$Exonic.function, DRCT001.actual.heatmap$variantKey, sep="__")
+      DRCT001.actual.heatmap$Name <- paste(DRCT001.actual.heatmap$Exonic.function, DRCT001.actual.heatmap$variantKey, sep="#")
       DRCT001.actual.heatmap <- DRCT001.actual.heatmap[,c(3:ncol(DRCT001.actual.heatmap))]
       DRCT001.actual.heatmap %<>% tibble::column_to_rownames(var = "Name")
       DRCT001.actual.heatmap <- memoSort(M = DRCT001.actual.heatmap)
@@ -811,7 +812,7 @@ primaryRelapse <- function(x) {
       })
       
       DRCT001.actual.heatmap %<>% tibble::rownames_to_column(var = "Name")
-      DRCT001.actual.heatmap %<>% tidyr::separate("Name", c("Exonic.function", "Gene", "AAChange"))
+      DRCT001.actual.heatmap %<>% tidyr::separate("Name", c("Exonic.function", "Gene", "AAChange"), sep="#")
       #DRCT001.actual.heatmap %<>% dplyr::arrange(-Sum)
       head( DRCT001.actual.heatmap)
       write.table(DRCT001.actual.heatmap, paste0("../RNASeq.Mutation.data/primary.relapse/",patientname,".actual.heatmap.pimary.relapse.heat.txt"), sep = "\t", row.names = FALSE,
@@ -823,7 +824,8 @@ primaryRelapse <- function(x) {
   DRCT001.filtered <- jun.actual %>% dplyr::filter(Patient.ID.x %in% patients)
   print(dim(DRCT001.filtered))
   if(nrow(DRCT001.filtered) > 1 ) {
-      DRCT001.filtered$variantKey.x <- paste(DRCT001.filtered$Gene.x, DRCT001.filtered$AAChange.x, sep="#")
+      DRCT001.filtered$variantKey.x <- paste(DRCT001.filtered$Gene.x, paste(DRCT001.filtered$Ref.x, DRCT001.filtered$Alt.x, DRCT001.filtered$AAChange.x, 
+                                                                          DRCT001.filtered$Start.x, sep = "/"), sep="#")
       DRCT001.filtered$dummyVal <- rep(1, nrow(DRCT001.filtered))
       DRCT001.filtered.heatmap <- reshape2::dcast(DRCT001.filtered, Exonic.function.x + variantKey.x ~ Sample.ID, value.var = "dummyVal",  fill = 0);
       DRCT001.filtered.heatmap$Name <- paste(DRCT001.filtered.heatmap$Exonic.function, DRCT001.filtered.heatmap$variantKey, sep="#")
@@ -845,36 +847,15 @@ primaryRelapse <- function(x) {
 }
 
 primaryrelapsePatients = c(
-  "DRCT001",
-  "EWS5000",
-  "EWS5201",
-  "MSKCC5000",
-  "MSKCC5001",
-  "MSKCC5002",
-  "MSKCC5003",
-  "MSKCC5004",
-  "MSKCC5005",
-  # "NB2305",
-  "NB2307",
-  "NB2308",
-  "NB2310",
-  "NB2318",
-  "NB2319",
-  "NCI0017",
-  "NCI0039",
-  "NCI0064",
-  "NCI0097",
-  "NCI0107",
-  "NCI0132",
-  "NCI0135",
-  "NCI0150",
-  "NCI0152",
-  "NCI0155",
-  "NCI0163",
-  "NCI0165",
-  "NCI0167",
-  "NCI0203",
-  # "NCI0229",
+  "DRCT001","EWS5000","EWS5201","MSKCC5000",
+  "MSKCC5001","MSKCC5002","MSKCC5003","MSKCC5004",
+  "MSKCC5005",# "NB2305",
+  "NB2307","NB2308",
+  "NB2310","NB2318","NB2319","NCI0017",
+  "NCI0039","NCI0064","NCI0097","NCI0107",
+  "NCI0132","NCI0135","NCI0150","NCI0152",
+  "NCI0155","NCI0163","NCI0165","NCI0167",
+  "NCI0203",# "NCI0229",
   "NCI0245")
 
 lapply(primaryrelapsePatients, primaryRelapse)
@@ -886,7 +867,6 @@ fileList <- list.files("../RNASeq.Mutation.data/primary.relapse/",full.names = T
 junFile <- fileList[grepl('filtered', fileList)] %>% 
   sapply(read.csv, sep="\t") %>% 
   bind_rows
-rownames(junFile) <- paste0(junFile$Exonic.function, junFile$Gene, junFile$AAChange, sep="#")
 write.table(junFile, "../RNASeq.Mutation.data/all.filtered.heatmap.pimary.relapse.heat.txt", sep = "\t", row.names = F, quote = F)
 ## Actual File
 fileList <- list.files("../RNASeq.Mutation.data/primary.relapse/",full.names = TRUE)
