@@ -52,9 +52,9 @@ ProjectSetUp <- R6Class(
       }
       print(paste0("Dimension of metadata after applying parameter 'factorsToExclude' is ", paste(dim(self$metaDataDF)[1])))
       print("Make R valid names in the metadata file and storing it as validMetaDataDF")
-      tempDF <- as.data.frame(lapply(self$metaDataDF[,c("Patient.ID","Sample.Data.ID","Sample.ID","Sample.ID.Alias")], make.names)) %>% data.frame() %>%
+      tempDF <- as.data.frame(lapply(self$metaDataDF[,c("Patient.ID","Patient.ID.updated","Sample.Data.ID","Sample.ID","Sample.ID.Alias")], make.names)) %>% data.frame() %>%
                                     dplyr::rename(valid.Sample.ID=Sample.ID)
-      self$validMetaDataDF <- cbind(tempDF, self$metaDataDF[,which(! names(self$metaDataDF) %in% c("Patient.ID","Sample.Data.ID","Sample.ID.Alias"))])
+      self$validMetaDataDF <- cbind(tempDF, self$metaDataDF[,which(! names(self$metaDataDF) %in% c("Patient.ID","Patient.ID.updated","Sample.Data.ID","Sample.ID.Alias"))])
     },
     readAnnotation = function() {
       self$annotationDF <- readRDS(self$annotationRDS) %>% as.data.frame()
