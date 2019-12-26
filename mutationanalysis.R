@@ -37,7 +37,7 @@ rnaseqMutationProject <- ProjectSetUp$new(
 
   outputPrefix            = "_rnaseq.annotated.vcf",
   factorName              = "PATIENT.ID",
-  metaDataFileName        = "MetadataMapper.v3.txt",
+  metaDataFileName        = "MetadataMapper.v4.txt",
   outputdirRDSDir         = "outputRDSOutput",
   outputdirTXTDir         = "outputTXTOutput",
   plotsDir                = "Figures",
@@ -357,8 +357,8 @@ write.table(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.DiseaseCausing,
 TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1 %>% filter(LIBRARY_TYPE %in% c("Tumor", "CellLine"))
 dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor)
 
-###### OR get reviewd & selected variants from a file #######
-TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor <- read.csv("../RNASeq.Mutation.data/Fig1_manual_filter_tier1_minusfaultygermline_addselectTier2Tier3_indelback_05_21_19_manual_indel_splice_Selected.txt",
+###### OR get reviewd & selected variants from a file ####### Version 1 ###################################
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor <- read.csv("../RNASeq.Mutation.data/Fig1_manual_filter_tier1_minusfaultygermline_addselectTier2Tier3_indelback_05_21_19_manual_indel_splice_Selected.SampleID.updated.txt",
                                                                   sep="\t", header = T)
 dim( TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor)
 TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor %>% 
@@ -367,8 +367,8 @@ dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor)
 
 ## Sample statistics
 SampleStatsMut.Tumor <- rnaseqMutationProject$validMetaDataDF %>% dplyr::filter(LIBRARY_TYPE %in% c("Tumor", "CellLine")) %>% 
-                              dplyr::select(DIAGNOSIS.Alias, Patient.ID.updated) %>%
-                              dplyr::group_by(DIAGNOSIS.Alias) %>% 
+                              dplyr::select(DIAGNOSIS.Substatus.Tumor.Normal.Tissue, Patient.ID.updated) %>%
+                              dplyr::group_by(DIAGNOSIS.Substatus.Tumor.Normal.Tissue) %>% 
                               summarise(PatientSum=n_distinct(Patient.ID.updated))
 SampleStatsMut.Tumor
 
@@ -388,6 +388,91 @@ MutationDataFiltPercent  <-   dplyr::left_join(MutationDataFiltSelect, SampleSta
   tidyr::spread(DIAGNOSIS.Alias, Percent) %>% data.frame()
 MutationDataFiltPercent[is.na(MutationDataFiltPercent)] <- 0
 View(MutationDataFiltPercent);dim(MutationDataFiltPercent)
+
+MutationDataFiltPercent.ByCohort  <-   dplyr::left_join(MutationDataFiltSelect, SampleStatsMut.Tumor, by="DIAGNOSIS.Alias" ) %>%
+  dplyr::select(one_of(c("Gene", "DIAGNOSIS.Alias", "GeneDiagByPatient", "PatientSum"))) %>%
+  dplyr::mutate(TotalByCohort = sum(GeneDiagByPatient)) %>% 
+  dplyr::group_by(DIAGNOSIS.Alias) %>% 
+  dplyr::mutate(Percent=( (TotalByCohort/732)*100)) %>% unique() %>%
+  dplyr::select(Gene, Percent) %>% 
+  tidyr::spread(Gene, Percent) %>% data.frame()
+MutationDataFiltPercent[is.na(MutationDataFiltPercent)] <- 0
+View(MutationDataFiltPercent);dim(MutationDataFiltPercent)
+
+
+
+
+###### OR get reviewd & selected variants from a file ####### Version 2 ###################################
+
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1 <- read.csv("../RNASeq.Mutation.data/Fig1_manual_filter_tier1_minusfaultygermline_addselectTier2Tier3_indelback_05_21_19_manual_indel_splice_Selected.SampleIDUpdated.txt",
+                                                          sep = "\t", header = TRUE)
+dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1)
+TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1 %>% filter(LIBRARY_TYPE %in% c("Tumor", "CellLine"))
+dim(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor)
+
+## Sample statistics
+SampleStatsMut.Tumor <- rnaseqMutationProject$validMetaDataDF %>% dplyr::filter(LIBRARY_TYPE %in% c("Tumor", "CellLine")) %>% dplyr::select(DIAGNOSIS.Substatus.Tumor.Normal.Tissue, Patient.ID.updated.Target) %>% 
+  dplyr::group_by(DIAGNOSIS.Substatus.Tumor.Normal.Tissue) %>% 
+  dplyr::mutate(PatientSum=n_distinct(Patient.ID.updated.Target)) %>% 
+  dplyr::select(DIAGNOSIS.Substatus.Tumor.Normal.Tissue, PatientSum) %>% distinct() %>%
+  dplyr::rename(Diagnosis.Alias = DIAGNOSIS.Substatus.Tumor.Normal.Tissue)
+SampleStatsMut.Tumor
+
+### Diagnosis Wise mutation frequency 
+MutationDataFilt <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor
+MutationDataFiltSelect <- MutationDataFilt %>% dplyr::select(one_of("Chr","Start","End","Ref","Alt", "Gene", "Diagnosis.Alias", "Patient.ID.updated.Target")) %>% 
+  dplyr::select("Gene","Patient.ID.updated.Target","Diagnosis.Alias") %>% 
+  dplyr::group_by(.dots = c("Gene", "Diagnosis.Alias")) %>% 
+  dplyr::mutate(GeneDiagByPatient = length(unique(Patient.ID.updated.Target))) %>% 
+  dplyr::select("Gene",  "Diagnosis.Alias", "GeneDiagByPatient" ) %>% distinct()
+View(MutationDataFiltSelect); dim(MutationDataFiltSelect)
+
+#MutationDataFilt <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor
+MutationDataFiltByDiagnosis <- dplyr::left_join(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor, SampleStatsMut.Tumor, by="Diagnosis.Alias" )
+MutationDataFiltSelectByDiagnosis <- MutationDataFiltByDiagnosis %>% dplyr::select(one_of("Gene", "Diagnosis.Alias", "Patient.ID.updated.Target", "PatientSum")) %>% 
+  dplyr::group_by(.dots = c("Gene", "Diagnosis.Alias")) %>% 
+  dplyr::mutate(GeneDiagByPatient = n_distinct(Patient.ID.updated.Target)) %>%
+  dplyr::mutate(PercentByDiagnosis = (GeneDiagByPatient/PatientSum)*100) %>%
+  dplyr::select(Gene,  Diagnosis.Alias,GeneDiagByPatient, PercentByDiagnosis, PatientSum) %>% distinct()
+View(MutationDataFiltSelectByDiagnosis); dim(MutationDataFiltSelectByDiagnosis)
+write.table(MutationDataFiltSelectByDiagnosis, "MutationDataFiltSelectByDiagnosis.txt", sep = "\t", row.names = FALSE, quote = FALSE)
+
+
+MutationDataFiltByCohort <- dplyr::left_join(TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor, SampleStatsMut.Tumor, by="Diagnosis.Alias" )
+MutationDataFiltSelectByCohort <- MutationDataFiltByCohort %>% dplyr::select(one_of("Gene", "Diagnosis.Alias", "Patient.ID.updated.Target", "PatientSum")) %>% 
+  dplyr::group_by(.dots = c("Gene")) %>% 
+  dplyr::mutate(GeneDiagByPatient = n_distinct(Patient.ID.updated.Target)) %>%
+  dplyr::mutate(GeneByCohortPercent = (GeneDiagByPatient/733)*100) %>%
+  dplyr::select(Gene, GeneDiagByPatient, GeneByCohortPercent ) %>% distinct()
+View(MutationDataFiltSelectByCohort); dim(MutationDataFiltSelectByCohort)
+write.table(MutationDataFiltSelectByCohort, "MutationDataFiltSelectByCohort.txt", sep = "\t", row.names = FALSE, quote = FALSE)
+
+
+MutationDataFiltPercent  <-   dplyr::left_join(MutationDataFiltSelect, SampleStatsMut.Tumor, by="(DIAGNOSIS.Substatus.Tumor.Normal.Tissue" ) %>%
+  dplyr::select(one_of(c("Gene", "(DIAGNOSIS.Substatus.Tumor.Normal.Tissue", "GeneDiagByPatient", "PatientSum"))) %>%
+  dplyr::mutate(Percent=( (GeneDiagByPatient/PatientSum)*100)) %>% unique() %>%
+  dplyr::select(Gene, DIAGNOSIS.Substatus.Tumor.Normal.Tissue, Percent) %>% 
+  tidyr::spread(DIAGNOSIS.Substatus.Tumor.Normal.Tissue, Percent) %>% data.frame()
+MutationDataFiltPercent[is.na(MutationDataFiltPercent)] <- 0
+View(MutationDataFiltPercent);dim(MutationDataFiltPercent)
+
+#### By Gene mutation function frequency
+MutationDataFilt <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor
+MutationDataFuncCbio <- MutationDataFilt %>% dplyr::select(one_of("Chr","Start","End","Ref","Alt", "Gene", "Exonic.function", "Patient.ID")) %>% 
+  dplyr::group_by_(.dots=c("Chr","Start","End","Ref","Alt", "Gene", "Exonic.function", "Patient.ID") ) %>% 
+  unique() %>% ungroup()  %>% 
+  dplyr::group_by_(.dots=c("Gene", "Exonic.function") ) %>%
+  dplyr::mutate(Count=n()) 
+dim(MutationDataFuncCbio)
+MutationDataFunc    <- MutationDataFuncCbio %>%
+  dplyr::select(one_of("Gene", "Exonic.function")) %>% 
+  dplyr::group_by_(.dots=c("Gene", "Exonic.function") ) %>%
+  dplyr::mutate(Count=n()) %>%  unique() %>% ungroup()  %>%
+  tidyr::spread(Exonic.function, Count) %>% data.frame()
+MutationDataFunc[is.na(MutationDataFunc)] <- 0
+MutationDataFunc$Sum = rowSums(MutationDataFunc[,-1])
+dim(MutationDataFunc);View(MutationDataFunc)
+
 
 ### memo sort #####
 # memoSort = function(M = NA) {
@@ -411,39 +496,21 @@ View(MutationDataFiltPercent);dim(MutationDataFiltPercent)
 # MutationDataFiltPercent.memoSort <- memoSort(test)
 # View(MutationDataFiltPercent.memoSort)
 
-
-#### By Gene mutation function frequency ####
-MutationDataFilt <- TumorFiltered.Normal.freq.VAF.TC.VC.MAF.Tier1.Tumor
-MutationDataFuncCbio <- MutationDataFilt %>% dplyr::select(one_of("Chr","Start","End","Ref","Alt", "Gene", "Exonic.function", "Patient.ID.updated")) %>% 
-  dplyr::group_by_(.dots=c("Chr","Start","End","Ref","Alt", "Gene", "Exonic.function", "Patient.ID.updated") ) %>% 
-  unique() %>% ungroup()  %>% 
-  dplyr::group_by_(.dots=c("Gene", "Exonic.function") ) %>%
-  dplyr::mutate(Count=n()) 
-dim(MutationDataFuncCbio)
-MutationDataFunc    <- MutationDataFuncCbio %>%
-  dplyr::select(one_of("Gene", "Exonic.function")) %>% 
-  dplyr::group_by_(.dots=c("Gene", "Exonic.function") ) %>%
-  dplyr::mutate(Count=n()) %>%  unique() %>% ungroup()  %>%
-  tidyr::spread(Exonic.function, Count) %>% data.frame()
-MutationDataFunc[is.na(MutationDataFunc)] <- 0
-MutationDataFunc$Sum = rowSums(MutationDataFunc[,-1])
-dim(MutationDataFunc);View(MutationDataFunc)
-
 ### Join the above two data frames
 mutationFreqPer <- dplyr::full_join(MutationDataFiltPercent, MutationDataFunc, by="Gene") %>% dplyr::arrange(-Sum) %>%
                       dplyr::mutate(Gene = factor(Gene, ordered = TRUE))
 write.table(mutationFreqPer, 
             paste(rnaseqMutationProject$workDir, rnaseqMutationProject$projectName, rnaseqMutationProject$outputdirTXTDir, 
-                  "6.mutation.Freq.Per.Diagnosis.and.Gene.v2.txt", sep="/"),
+                  "6.mutation.Freq.Per.Diagnosis.and.Gene.v3.txt", sep="/"),
             sep="\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 
-mutationFreqPer.RM.Single <- mutationFreqPer %>% filter(Sum >=3) %>% dplyr::select(1:14)
+mutationFreqPer.RM.Single <- mutationFreqPer %>% filter(Sum >=3) %>% dplyr::select(1:18)
 dim(mutationFreqPer.RM.Single);View(mutationFreqPer.RM.Single)
-mutationFreqPer.RM.Single.tidy.log <- gather(mutationFreqPer.RM.Single, key="Diagnosis", value="Frequency", 2:14) %>% 
+mutationFreqPer.RM.Single.tidy.log <- gather(mutationFreqPer.RM.Single, key="Diagnosis", value="Frequency", 2:18) %>% 
          mutate( 
                 #Frequency = log2(Frequency+1),
-                Gene = factor(Gene, levels=rev(mutationFreqPer.RM.Single$Gene))
+                Gene = factor(Gene, levels=rev(unique(mutationFreqPer.RM.Single$Gene)), ordered = TRUE)
                 )
 
 ## Main heatmap
@@ -472,7 +539,7 @@ HeatMap <- ggplot(mutationFreqPer.RM.Single.tidy.log, aes(Diagnosis,Gene)) +
         legend.key.width =unit(3,"line"))
 
 ## Side Frequency Plot
-mutationType.RM.Single <- mutationFreqPer %>% filter(Sum >=2) %>% arrange(desc(Sum)) %>% dplyr::select(c(1,16:22))
+mutationType.RM.Single <- mutationFreqPer %>% filter(Sum >=3) %>% arrange(desc(Sum)) %>% dplyr::select(c(1,19:25))
 mutationType.RM.Single.tidy.log <- gather(mutationType.RM.Single, key="Type", value="Counts", 2:8) %>% 
   mutate(Counts = Counts,
          Gene = factor(Gene, levels=rev(mutationFreqPer.RM.Single$Gene),ordered = TRUE),
@@ -494,8 +561,9 @@ myColors <- setNames( c("#31a354", "#d2a679", "#7094db", "#669999", "#bf4040", "
 customColors <- myColors
 
 ## green orange/brown violet red brinjal skyblue
-StackedBar <- ggplot(mutationType.RM.Single.tidy.log, aes(x=Gene, y=Counts, fill=Type) ) +
-  #ggplot(mutationType.RM.Single.tidy.log, aes(x=Gene, y=Percent, fill=Type) ) +
+#StackedBar <- ggplot(mutationType.RM.Single.tidy.log, aes(x=Gene, y=Counts, fill=Type) ) +
+StackedBar <- #ggplot(test, aes(x=Gene, y=Counts, fill=Type) ) +
+  ggplot(mutationType.RM.Single.tidy.log, aes(x=Gene, y=Counts, fill=Type) ) +
   geom_bar(stat="identity") + coord_flip() +
   scale_fill_manual(values = customColors, name = "Mutation Type", 
                     guide = guide_legend( 
@@ -517,7 +585,7 @@ StackedBar <- ggplot(mutationType.RM.Single.tidy.log, aes(x=Gene, y=Counts, fill
 ## Bind both of them
 ggarrange(HeatMap, StackedBar, ncol=2)
 
-pdf("C:/Users/sindiris/R Scribble/RNASeq.Mutation.data/Figures/Figure.1b.Variant_percentage_and_count.Tier 1.v8.NL.v3.pdf", height = 25, width = 10 )
+pdf("C:/Users/sindiris/R Scribble/RNASeq.Mutation.data/Figures/Figure.1b.Variant_percentage_and_count.Tier 1.v8.NL.v5.135.pdf", height = 25, width = 10 )
 ggarrange(HeatMap, StackedBar, ncol=2)
 dev.off()
 
@@ -736,7 +804,7 @@ nature = whichSignatures(tumor.ref = sigs.input,
 plotSignatures(nature, sub='Mutational Signature based on Nature 2013--23945592')
 makePie(nature, sub='Mutational Signature based on Nature 2013--23945592')
 
-#### Retrieving the dataset
+#### Retrieving the dataset ####
 jun.data.set <- read.csv("C:/Users/sindiris/R Scribble/RNASeq.Mutation.data/Fig1_manual_filter_tier1_minusfaultygermline_addselectTier2Tier3_indelback_05_21_19_manual_indel_splice_Selected.txt",
                          sep="\t", header = TRUE)
 jun.data.set$keyNew <- paste0(jun.data.set$Patient.ID,
@@ -796,7 +864,7 @@ primaryRelapse <- function(x) {
   ## Using actual dataset
   DRCT001.actual <- actual.data.set %>% dplyr::filter(Patient.ID %in% patients)
   print(dim(DRCT001.actual))
-  if(nrow(DRCT001.actual) > 1 ) {
+  if(nrow(DRCT001.actual) >= 1 ) {
       DRCT001.actual$variantKey <- paste(DRCT001.actual$Gene, paste(DRCT001.actual$Ref, DRCT001.actual$Alt, DRCT001.actual$AAChange,
                                                                     DRCT001.actual$Start, sep = "/"), sep="#")
       DRCT001.actual$dummyVal <- rep(1, nrow(DRCT001.actual))
@@ -814,8 +882,8 @@ primaryRelapse <- function(x) {
       DRCT001.actual.heatmap %<>% tibble::rownames_to_column(var = "Name")
       DRCT001.actual.heatmap %<>% tidyr::separate("Name", c("Exonic.function", "Gene", "AAChange"), sep="#")
       #DRCT001.actual.heatmap %<>% dplyr::arrange(-Sum)
-      head( DRCT001.actual.heatmap)
-      write.table(DRCT001.actual.heatmap, paste0("../RNASeq.Mutation.data/primary.relapse/",patientname,".actual.heatmap.pimary.relapse.heat.txt"), sep = "\t", row.names = FALSE,
+      print(head( DRCT001.actual.heatmap))
+      write.table(DRCT001.actual.heatmap, paste0("../RNASeq.Mutation.data/primary.relapse.v2/",patientname,".actual.heatmap.pimary.relapse.heat.txt"), sep = "\t", row.names = FALSE,
                   col.names = TRUE)
   }
   
@@ -823,7 +891,7 @@ primaryRelapse <- function(x) {
   ## Using Jun's filtered dataset
   DRCT001.filtered <- jun.actual %>% dplyr::filter(Patient.ID.x %in% patients)
   print(dim(DRCT001.filtered))
-  if(nrow(DRCT001.filtered) > 1 ) {
+  if(nrow(DRCT001.filtered) >= 1 ) {
       DRCT001.filtered$variantKey.x <- paste(DRCT001.filtered$Gene.x, paste(DRCT001.filtered$Ref.x, DRCT001.filtered$Alt.x, DRCT001.filtered$AAChange.x, 
                                                                           DRCT001.filtered$Start.x, sep = "/"), sep="#")
       DRCT001.filtered$dummyVal <- rep(1, nrow(DRCT001.filtered))
@@ -831,7 +899,10 @@ primaryRelapse <- function(x) {
       DRCT001.filtered.heatmap$Name <- paste(DRCT001.filtered.heatmap$Exonic.function, DRCT001.filtered.heatmap$variantKey, sep="#")
       DRCT001.filtered.heatmap <- DRCT001.filtered.heatmap[,c(3:ncol(DRCT001.filtered.heatmap))]
       DRCT001.filtered.heatmap %<>% tibble::column_to_rownames(var = "Name")
-      DRCT001.filtered.heatmap <- memoSort(M = DRCT001.filtered.heatmap)
+      if(ncol(DRCT001.filtered.heatmap)>1){
+        
+        DRCT001.filtered.heatmap <- memoSort(M = DRCT001.filtered.heatmap)
+      }
       DRCT001.filtered.heatmap$Sum <- apply(DRCT001.filtered.heatmap,1, function(x) { 
         x <- as.numeric(x)
         #return(sum(x[3:length(x)]))
@@ -841,7 +912,7 @@ primaryRelapse <- function(x) {
       DRCT001.filtered.heatmap %<>% tidyr::separate("Name", c("Exonic.function", "Gene", "AAChange"), sep="#")
       #DRCT001.filtered.heatmap %<>% dplyr::arrange(-Sum)
       head( DRCT001.filtered.heatmap)
-      write.table(DRCT001.filtered.heatmap, paste0("../RNASeq.Mutation.data/primary.relapse/",patientname,".filtered.heatmap.pimary.relapse.heat.txt"), sep = "\t", row.names = FALSE,
+      write.table(DRCT001.filtered.heatmap, paste0("../RNASeq.Mutation.data/primary.relapse.v2/",patientname,".filtered.heatmap.pimary.relapse.heat.txt"), sep = "\t", row.names = FALSE,
                   col.names = TRUE)
   }
 }
@@ -849,14 +920,13 @@ primaryRelapse <- function(x) {
 primaryrelapsePatients = c(
   "DRCT001","EWS5000","EWS5201","MSKCC5000",
   "MSKCC5001","MSKCC5002","MSKCC5003","MSKCC5004",
-  "MSKCC5005",# "NB2305",
-  "NB2307","NB2308",
+  "MSKCC5005","NB2305","NB2307","NB2308",
   "NB2310","NB2318","NB2319","NCI0017",
   "NCI0039","NCI0064","NCI0097","NCI0107",
   "NCI0132","NCI0135","NCI0150","NCI0152",
   "NCI0155","NCI0163","NCI0165","NCI0167",
-  "NCI0203",# "NCI0229",
-  "NCI0245")
+  "NCI0203","NCI0245","NCI0229"
+  )
 
 lapply(primaryrelapsePatients, primaryRelapse)
 
