@@ -124,7 +124,7 @@ ProjectSetUp <- R6Class(
       self$outputPrefix <- outputPrefix
       self$factorName <- factorName
       self$metaDataFileName <- metaDataFileName
-      self$workDir <- "C:/Users/sindiris/R Scribble/"
+      self$workDir <- "T:/Sivasish_Sindiri/R Scribble/"
       self$outputdirRDSDir <- outputdirRDSDir
       self$outputdirTXTDir <- outputdirTXTDir
       self$vcfFilesDir        <- vcfFilesDir
@@ -173,7 +173,7 @@ CoreUtilities <- R6Class(
         sampleName <- basename(x) 
       }
       
-      rdsObj <- readRDS("C:/Users/sindiris/R Scribble/RNASeq.Mutation.data/dummyRDS")
+      rdsObj <- readRDS("T:/Sivasish_Sindiri/R Scribble/RNASeq.Mutation.data/dummyRDS")
       
       tryCatch({ 
         rdsObj <-     fread(x, sep="\t", header = TRUE, check.names = TRUE) 
