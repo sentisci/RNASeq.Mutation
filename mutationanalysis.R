@@ -1190,8 +1190,8 @@ write.table(actualFile, "../RNASeq.Mutation.data/all.actual.heatmap.pimary.relap
 ## Fusions
 
 fusions <- read.csv("../RNASeq.Mutation.data/Table.S3.Fusion.v2.txt", sep="\t")
-Fusion_dups_patients_rank <- fusion_test %>% dplyr::mutate(TotalReadsSum = SPTool1 + SPTool2 + SPTool3) %>% 
-                                              dplyr::group_by(Patient.ID.USI, FusedGene) %>% 
+Fusion_dups_patients_rank <- fusions %>% dplyr::mutate(TotalReadsSum = SPTool1 + SPTool2 + SPTool3) %>% 
+                                              dplyr::group_by(Patient.ID.USI, Sample.Data.ID, FusedGene) %>% 
                                               dplyr::mutate(Count = n()) %>% 
                                               dplyr::mutate(Sum_rank=rank(-Count, ties.method = "random") ) %>% filter(Sum_rank == 1)
 write.table(Fusion_dups_patients_rank, "../RNASeq.Fusion.data/Table.S3.Fusion.v2.Fusion_dups_patients_rank.txt", sep = "\t", row.names = FALSE)
